@@ -404,6 +404,8 @@ class DatasetQ10(torch.utils.data.dataset.Dataset):
         self.total_agents = 0
         self.num_agents_list = []
         self.curves = []
+        self.speeds = []
+        self.distances = []
 
         for idx in self.ids:
             with open('{}/{}/{}.bin'.format(self.data_dir, self.data_type, idx), 'rb') as f:
@@ -418,6 +420,8 @@ class DatasetQ10(torch.utils.data.dataset.Dataset):
                     else:
                         # self.curves.append(np.sign(curve) * np.rad2deg(abs(curve)))
                         self.curves.append(np.rad2deg(curve))
+                        self.speeds.append(np.linalg.norm(episode[5][i]))
+                        self.distances.append(np.linalg.norm(points_i[episode[3][i]-1] - points_i[0]))
 
                 if np.sum(episode[4]) != 0:
                     episode.append(idx)
@@ -462,6 +466,32 @@ class DatasetQ10(torch.utils.data.dataset.Dataset):
         plt.xlabel('Path Curvature (Deg)')
         plt.ylabel('count')
         plt.xlim([-90, 90])
+        plt.show()
+
+    def show_speed_distribution(self):
+        print("전체 episodes: {}, 에이전트 개수: {}".format(len(self.episodes), self.total_agents))
+        print("episode 당 평균 에이전트 개수: {:.2f}".format(np.mean(self.num_agents_list)))
+        print("평균 에이전트 속도: {:.2f} (m/s)".format(np.mean(np.abs(self.speeds))))
+
+        plt.figure(figsize=(10, 5))
+        plt.title('Distribution')
+        plt.hist(self.speeds, bins=90, color='royalblue', range=(0, 20))
+        plt.xlabel('Agent speed (m/s)')
+        plt.ylabel('count')
+        plt.xlim([0, 20])
+        plt.show()
+
+    def show_distance_distribution(self):
+        print("전체 episodes: {}, 에이전트 개수: {}".format(len(self.episodes), self.total_agents))
+        print("episode 당 평균 에이전트 개수: {:.2f}".format(np.mean(self.num_agents_list)))
+        print("평균 에이전트 미래 주행거리: {:.2f} (m)".format(np.mean(np.abs(self.distances))))
+
+        plt.figure(figsize=(10, 5))
+        plt.title('Distribution')
+        plt.hist(self.distances, bins=90, color='royalblue', range=(3, 40))
+        plt.xlabel('Future Path Length (m)')
+        plt.ylabel('count')
+        plt.xlim([3, 40])
         plt.show()
 
 

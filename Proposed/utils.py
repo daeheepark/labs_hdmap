@@ -1159,8 +1159,8 @@ class ModelTest:
                         src_traj_i = src_traj_i[agent_tgt_three_mask[cum_num_src_trajs[i]:cum_num_src_trajs[i + 1]]]
                         src_lens_i = src_lens_i[agent_tgt_three_mask[cum_num_src_trajs[i]:cum_num_src_trajs[i + 1]]]
 
-                        dao_i, dao_mask_i = self.dao(candidate_i, map_file_i)
-                        dac_i, dac_mask_i = self.dac(candidate_i, map_file_i)
+                        dao_i, dao_mask_i = self.dao(candidate_i, map_file_i, img=batch[0][i])
+                        dac_i, dac_mask_i = self.dac(candidate_i, map_file_i, img=batch[0][i])
 
                         epoch_dao += dao_i.sum()
                         dao_agents += dao_mask_i.sum()
@@ -1330,7 +1330,8 @@ class ModelTest:
                [minade3.cpu().numpy(), minfde3.cpu().numpy()]
 
     @staticmethod
-    def dac(gen_trajs, map_file):
+    def dac(gen_trajs, map_file, img=None):
+        map_array = None
         if '.png' in map_file:
             map_array = cv2.imread(map_file, cv2.IMREAD_COLOR)
 
@@ -1339,10 +1340,16 @@ class ModelTest:
                 map_array = pkl.load(pnt)
 
         elif '.bin' in map_file:
-            with open(map_file, 'rb') as pnt:
-                map_array = pkl.load(pnt)
+            if img is not None:
+                import copy
+                map_array = copy.deepcopy(img)
                 map_array = np.asarray(map_array)[0]
-                map_array = cv2.resize(map_array, (224, 224))[..., np.newaxis]
+                map_array = cv2.resize(map_array, (128, 128))[..., np.newaxis]
+            else:
+                with open(map_file, 'rb') as pnt:
+                    map_array = pkl.load(pnt)
+                    map_array = np.asarray(map_array)[0]
+                    map_array = cv2.resize(map_array, (128, 128))[..., np.newaxis]
 
         # da_mask = np.any(map_array > 0, axis=-1)
         da_mask = np.any(map_array > np.min(map_array), axis=-1)
@@ -1351,7 +1358,7 @@ class ModelTest:
         dac = []
 
         # gen_trajs = ((gen_trajs + 56) * 2).astype(np.int64)
-        gen_trajs = ((gen_trajs + 32) * 3.5).astype(np.int64)
+        gen_trajs = ((gen_trajs + 32) * 2).astype(np.int64)
 
         stay_in_da_count = [0 for i in range(num_agents)]
         for k in range(num_candidates):
@@ -1359,7 +1366,7 @@ class ModelTest:
 
             stay_in_da = [True for i in range(num_agents)]
 
-            oom_mask = np.any(np.logical_or(gen_trajs_k >= 224, gen_trajs_k < 0), axis=-1)
+            oom_mask = np.any(np.logical_or(gen_trajs_k >= 128, gen_trajs_k < 0), axis=-1)
 
             diregard_mask = oom_mask.sum(axis=-1) > 2
             for t in range(decoding_timesteps):
@@ -1367,7 +1374,7 @@ class ModelTest:
                 oom_mask_t = oom_mask[:, t]
                 x, y = gen_trajs_kt.T
 
-                lin_xy = (x * 224 + y)
+                lin_xy = (x * 128 + y)
                 lin_xy[oom_mask_t] = -1
                 for i in range(num_agents):
                     xi, yi = x[i], y[i]
@@ -1398,7 +1405,8 @@ class ModelTest:
         return np.array(dac), dac_mask
 
     @staticmethod
-    def dao(gen_trajs, map_file):
+    def dao(gen_trajs, map_file, img=None):
+        map_array = None
         if '.png' in map_file:
             map_array = cv2.imread(map_file, cv2.IMREAD_COLOR)
 
@@ -1407,10 +1415,16 @@ class ModelTest:
                 map_array = pkl.load(pnt)
 
         elif '.bin' in map_file:
-            with open(map_file, 'rb') as pnt:
-                map_array = pkl.load(pnt)
+            if img is not None:
+                import copy
+                map_array = copy.deepcopy(img)
                 map_array = np.asarray(map_array)[0]
-                map_array = cv2.resize(map_array, (224, 224))[..., np.newaxis]
+                map_array = cv2.resize(map_array, (128, 128))[..., np.newaxis]
+            else:
+                with open(map_file, 'rb') as pnt:
+                    map_array = pkl.load(pnt)
+                    map_array = np.asarray(map_array)[0]
+                    map_array = cv2.resize(map_array, (128, 128))[..., np.newaxis]
 
         # da_mask = np.any(map_array > 0, axis=-1)
         da_mask = np.any(map_array > np.min(map_array), axis=-1)
@@ -1421,12 +1435,12 @@ class ModelTest:
         occupied = [[] for i in range(num_agents)]
 
         # gen_trajs = ((gen_trajs + 56) * 2).astype(np.int64)
-        gen_trajs = ((gen_trajs + 32) * 3.5).astype(np.int64)
+        gen_trajs = ((gen_trajs + 32) * 2).astype(np.int64)
 
         for k in range(num_candidates):
             gen_trajs_k = gen_trajs[:, k]
 
-            oom_mask = np.any(np.logical_or(gen_trajs_k >= 224, gen_trajs_k < 0), axis=-1)
+            oom_mask = np.any(np.logical_or(gen_trajs_k >= 128, gen_trajs_k < 0), axis=-1)
             diregard_mask = oom_mask.sum(axis=-1) > 2
 
             for t in range(decoding_timesteps):
@@ -1434,7 +1448,7 @@ class ModelTest:
                 oom_mask_t = oom_mask[:, t]
                 x, y = gen_trajs_kt.T
 
-                lin_xy = (x * 224 + y)
+                lin_xy = (x * 128 + y)
                 lin_xy[oom_mask_t] = -1
                 for i in range(num_agents):
                     xi, yi = x[i], y[i]

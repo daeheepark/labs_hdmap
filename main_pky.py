@@ -48,10 +48,10 @@ def train(args):
                                        velocity_const=args.velocity_const, num_candidates=args.num_candidates,
                                        decoding_steps=nfuture, att=crossmodal_attention)
 
-    ckpt = 'experiment/None_None_fake_AttGlobal_Scene_CAM_NFDecoder__03_January__22_25_/epoch40.pth.tar'
-    if ckpt is not None:
-        checkpoint = torch.load(ckpt)
-        model.load_state_dict(checkpoint['model_state'], strict=False)
+    # ckpt = 'experiment/None_None_fake_AttGlobal_Scene_CAM_NFDecoder__03_January__22_25_/epoch40.pth.tar'
+    # if ckpt is not None:
+    #     checkpoint = torch.load(ckpt)
+    #     model.load_state_dict(checkpoint['model_state'], strict=False)
 
     model = model.to(device)
 
@@ -218,8 +218,8 @@ class Visualizer:
             if len(xy_local[0]) != 0:
                 self.draw_paths(plt.gca(), xy_local)
                 plt.scatter(xy_local[2][:, 0], xy_local[2][:, 1], c='b', alpha=0.3)
-            plt.xlim(-25, 25)
-            plt.ylim(-25, 25)
+            plt.xlim(-32, 32)
+            plt.ylim(-32, 32)
 
             plt.scatter(start[i][:, 0], start[i][:, 1], color='r')
 
@@ -227,11 +227,13 @@ class Visualizer:
                 paths = np.insert(predicted[i][j], 0, start[i][j], axis=1)
                 for path in paths:
                     plt.plot(path[:, 0], path[:, 1], color='r')
-            plt.text(-24, 22, 'ploss: {:.3f}\nqloss: {:.3f}'.format(p_loss[i], q_loss[i]), fontsize=15, color='r')
+            plt.text(-31, 28, 'ploss: {:.3f}\nqloss: {:.3f}'.format(p_loss[i], q_loss[i]), fontsize=15, color='r')
 
-            plt.savefig(results_dir + '/{}.png'.format(i), dpi=300)
+            plt.savefig(results_dir + '/{}.png'.format(i), dpi=150)
             plt.pause(0.001)
             plt.cla()
+            if i > 120:
+                break
 
         video_name = 'results/{}.avi'.format(results_idx)
 
@@ -253,7 +255,7 @@ class Visualizer:
         translation = local_paths[2]
         for i in range(len(past)):
             if len(past[i]) != 0:
-                path = np.append(past[i][-6:], [translation[i]], axis=0)
+                path = np.append([translation[i]], past[i][-6:], axis=0)
                 ax.plot(path[:, 0], path[:, 1], color='steelblue', linewidth=6, alpha=0.3)
             if len(future[i]) != 0:
                 path = np.append([translation[i]], future[i][:6], axis=0)
