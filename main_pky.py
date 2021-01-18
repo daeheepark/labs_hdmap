@@ -232,8 +232,8 @@ class Visualizer:
             plt.savefig(results_dir + '/{}.png'.format(i), dpi=150)
             plt.pause(0.001)
             plt.cla()
-            if i > 120:
-                break
+            #if i > 120:
+            #    break
 
         video_name = 'results/{}.avi'.format(results_idx)
 
@@ -299,6 +299,8 @@ class Visualizer:
                 num_tgt_trajs, tgt_trajs, tgt_lens, tgt_len_idx, \
                 tgt_two_mask, tgt_three_mask, \
                 decode_start_vel, decode_start_pos, scene_id = batch
+
+                scene_images[scene_images != 0] = 0
 
                 # Detect dynamic batch size
                 batch_size = scene_images.size(0)
