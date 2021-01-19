@@ -70,9 +70,9 @@ python main_pky.py \
 ```python
 python main_pky.py \
 --version 'v1.0-trainval' or 'v1.0-mini' --data_type 'real' or 'fake' \
---batch_size 3 (dynamic batch size) --gpu_devices 0 \
 --ploss_type 'mseloss' or 'map' \
---beta 0.1 --batch_size 3 --min_angle 0.001745 (radian) --max_angle None (None for no limitation) \
+--beta 0.1 --batch_size 3 (dynamic batch size) --gpu_devices 0 \
+--min_angle 0.001745 (radian) --max_angle None (None for no limitation) \
 --test_times 3 (total test times) \
 --test_ckpt (model weights path) \
 --test_dir (path to save evaluation results)
@@ -85,10 +85,9 @@ python main_pky.py \
 ```python
 python main_pky.py \
 --version 'v1.0-trainval' or 'v1.0-mini' --data_type 'real' or 'fake' \
---batch_size 3 (dynamic batch size) --gpu_devices 0 \
 --ploss_type 'mseloss' or 'map' \
---beta 0.1 --batch_size 3 --min_angle 0.001745 (radian) --max_angle None (None for no limitation) \
---test_times 3 (total test times) \
+--beta 0.1 --batch_size 1 --gpu_devices 0 \
+--min_angle 0.001745 (radian) --max_angle None (None for no limitation) \
 --test_ckpt (model weights path) \
 --test_dir (path to save visuzalized images) --viz
 ```
