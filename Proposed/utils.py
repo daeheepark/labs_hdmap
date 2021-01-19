@@ -896,6 +896,8 @@ class ModelTest:
                     tgt_two_mask, tgt_three_mask, \
                     decode_start_vel, decode_start_pos, scene_id = batch
 
+                    #scene_images[scene_images != 0] = 0
+
                     # Detect dynamic batch size
                     batch_size = scene_images.size(0)
                     num_three_agents = torch.sum(tgt_three_mask)
