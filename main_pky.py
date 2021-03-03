@@ -406,8 +406,10 @@ def posthoc(args):
         crossmodal_attention = True
     else:
         crossmodal_attention = False
-    model = Global_Scene_CAM_DSF_NFDecoder(device=device, agent_embed_dim=args.agent_embed_dim, nfuture=nfuture, att_dropout=args.att_dropout,
-                                           velocity_const=args.velocity_const, num_candidates=args.num_candidates, decoding_steps=nfuture, att=crossmodal_attention)
+    model = Global_Scene_CAM_DSF_NFDecoder(device=device, agent_embed_dim=args.agent_embed_dim, nfuture=nfuture,
+                                           att_dropout=args.att_dropout,
+                                           velocity_const=args.velocity_const, num_candidates=args.num_candidates,
+                                           decoding_steps=nfuture, att=crossmodal_attention)
 
     use_scene = True
     scene_size = (64, 64)
@@ -415,70 +417,69 @@ def posthoc(args):
 
     if ploss_type == 'mseloss':
         from R2P2_MA.model_utils import MSE_Ploss
-        ploss_criterion = MSE_Ploss()
-    else:
+        ploss_criterion = MSE_Ploss().to(device)
+    elif ploss_type == 'map':
         from R2P2_MA.model_utils import Interpolated_Ploss
-        ploss_criterion = Interpolated_Ploss()
+        ploss_criterion = Interpolated_Ploss().to(device)
+    elif ploss_type == 'all':
+        from R2P2_MA.model_utils import MSE_Ploss, Interpolated_Ploss
+        ploss_criterion = (MSE_Ploss().to(device), Interpolated_Ploss().to(device))
 
     model = model.to(device)
 
     from dataset.nuscenes import NuscenesDataset, nuscenes_collate
 
-    if not os.path.isfile(args.posthoc_tune):
-        # 3) load dataset
-        version = args.version
-        data_type = args.data_type
-        load_dir = args.load_dir
-        min_angle = args.min_angle
-        max_angle = args.max_angle
-        print('min angle:', str(min_angle), ', max angle:', str(max_angle))
+    # 3) load dataset
+    version = args.version
+    data_type = args.data_type
+    load_dir = args.load_dir
+    min_angle = args.min_angle
+    max_angle = args.max_angle
+    print('min angle:', str(min_angle), ', max angle:', str(max_angle))
 
-        train_dataset = DatasetQ10(version=version, load_dir=load_dir, data_partition='train',
-                                   shuffle=True, val_ratio=0.3, data_type=data_type, min_angle=min_angle,
-                                   max_angle=max_angle)
+    train_dataset = DatasetQ10(version=version, load_dir=load_dir, data_partition='train',
+                               shuffle=True, val_ratio=0.3, data_type=data_type, min_angle=min_angle,
+                               max_angle=max_angle)
 
-        val_dataset = DatasetQ10(version=version, load_dir=load_dir, data_partition='val',
-                                 shuffle=False, val_ratio=0.3, data_type='real', min_angle=min_angle,
-                                 max_angle=max_angle)
+    val_dataset = DatasetQ10(version=version, load_dir=load_dir, data_partition='val',
+                             shuffle=False, val_ratio=0.3, data_type='real', min_angle=min_angle,
+                             max_angle=max_angle)
 
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False, pin_memory=True,
-                                  collate_fn=lambda x: nuscenes_collate(x), num_workers=args.num_workers)
-        valid_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, pin_memory=True,
-                                  collate_fn=lambda x: nuscenes_collate(x), num_workers=1)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False, pin_memory=True,
+                              collate_fn=lambda x: nuscenes_collate(x), num_workers=args.num_workers)
+    valid_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, pin_memory=True,
+                              collate_fn=lambda x: nuscenes_collate(x), num_workers=1)
 
-        print(f'Train Examples: {len(train_dataset)} | Valid Examples: {len(val_dataset)}')
+    print(f'Train Examples: {len(train_dataset)} | Valid Examples: {len(val_dataset)}')
 
-        # Model optimizer
-        if args.optimizer == 'adam':
-            optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=1e-4)
-        elif args.optimizer == 'sgd':
-            optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9, weight_decay=1e-4)
-        else:
-            optimizer = None
-
-        # Trainer
-        exp_path = args.exp_path
-
-        ploss_criterion = ploss_criterion.to(device)
-        trainer = DSFTrainer(model, train_loader, valid_loader, optimizer, exp_path, args, device, ploss_criterion)
-        trainer.traindsf(args.num_epochs)
-
+    # Model optimizer
+    if args.optimizer == 'adam':
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=1e-4)
+    elif args.optimizer == 'sgd':
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9, weight_decay=1e-4)
     else:
-        test_dataset = NuscenesDataset(args.test_partition, map_version=args.map_version, sampling_rate=args.sampling_rate, sample_stride=args.sample_stride,
-                                       use_scene=use_scene, scene_size=scene_size, ploss_type=ploss_type, num_workers=args.num_workers, cache_file=args.test_cache, multi_agent=args.multi_agent)
-        test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, pin_memory=True,
-                                 collate_fn=lambda x: nuscenes_collate(x), num_workers=1)
+        optimizer = None
 
-        print(f'Test Examples: {len(test_dataset)}')
-        if not os.path.isdir(args.test_dir):
-            os.mkdir(args.test_dir)
+    # Trainer
+    exp_path = args.exp_path
 
-        ploss_criterion = ploss_criterion.to(device)
-        tester = ModelDSFTest(model, test_loader, args, device, ploss_criterion)
+    trainer = DSFTrainer(model, train_loader, valid_loader, optimizer, exp_path, args, device, ploss_criterion)
+    trainer.traindsf(args.num_epochs)
 
-        tester.run_draw()
+    # tester = ModelDSFTest(model, train_loader, args, device, ploss_criterion)
+    # tester.run_draw()
 
-
+    # if not os.path.isfile(args.posthoc_tune):
+    #     print('training from initial...')
+    #
+    #     trainer = DSFTrainer(model, train_loader, valid_loader, optimizer, exp_path, args, device, ploss_criterion)
+    #     trainer.traindsf(args.num_epochs)
+    #
+    # else:
+    #     print('pretrained weight: {}'.format(args.posthoc_tune))
+    #
+    #     tester = ModelDSFTest(model, train_loader, args, device, ploss_criterion)
+    #     tester.run_draw()
 
 
 def visualize(args):
@@ -638,7 +639,33 @@ if __name__ == "__main__":
     parser.add_argument('--posthoc_tune', default=None, help="Post-hoc tunning for dsf network")
     parser.add_argument('--post_epochs', type=int, default=None, help='Training iteration of post-hoc tunning')
 
-    args = parser.parse_args()
+    parser.add_argument('--gamma', type=float, default=0.5)
+    parser.add_argument('--lamb', type=float, default=0.5)
+
+    # args = parser.parse_args()
+    lamb = 10.0  # diversity loss
+    gamma = 10.0  # map loss
+
+    beta = 1.0
+    # test_path = 'experiment/beta_1.0_gamma_10.0_lamb_0.1_clamp_32_mse_map__04_February__04_01_/epoch30.pth.tar'
+    test_path = 'experiment/None_None_real_AttGlobal_Scene_CAM_NFDecoder__03_January__03_55_/epoch100.pth.tar'
+
+    pretrained_path = 'experiment/None_None_real_AttGlobal_Scene_CAM_NFDecoder__03_January__03_55_/epoch100.pth.tar'
+
+#     args = parser.parse_args('--tag beta_{}_gamma_{}_lamb_{}_clamp_32_mse_map --model_type Global_Scene_CAM_DSF_NFDecoder \
+# --batch_size 128 --num_epochs 30 --agent_embed_dim 128 \
+# --num_candidates 6 --test_ckpt {} --test_partition val --test_dir ./test \
+# --posthoc_tune {} --ploss_type all \
+# --post_epochs 30 --learning_rate 1e-3 --test_times 1 --beta {} \
+# --version v1.0-trainval --data_type real --min_angle 0.001745 \
+# --posthoc --gamma {} --lamb {}'.format(beta, gamma, lamb, test_path, pretrained_path, beta, gamma, lamb).split(' '))
+
+#     args = parser.parse_args('--version v1.0-mini --data_type real --ploss_type mseloss \
+# --beta 0.1 --batch_size 1 --test_ckpt {} --test_dir test_results --min_angle 0.001745 --viz'.format(test_path).split(' '))
+
+# 0.1도: 0.001745, 5도: 0.0872665, 10도: 0.174533
+    args = parser.parse_args('--version v1.0-trainval --data_type real --ploss_type mseloss --min_angle 0.001745 \
+--beta 0.1 --batch_size 3 --test_ckpt {} --test_times 1 --test_dir test_results'.format(test_path).split(' '))
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_devices
 
