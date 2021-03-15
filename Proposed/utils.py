@@ -827,7 +827,8 @@ class ModelTest:
         self.load_checkpoint(args.test_ckpt)
 
     def load_checkpoint(self, ckpt):
-        checkpoint = torch.load(ckpt)
+        # checkpoint = torch.load(ckpt)
+        checkpoint = torch.load(ckpt, map_location='cuda:0')
         self.model.load_state_dict(checkpoint['model_state'], strict=False)
 
     def run(self):
@@ -846,6 +847,9 @@ class ModelTest:
         list_dao = []
         list_dac = []
 
+        list_sd =[]
+        list_angle = []
+
         for test_time in range(self.test_times):
 
             epoch_loss = 0.0
@@ -862,6 +866,9 @@ class ModelTest:
             epoch_dac = 0.0
             dao_agents = 0.0
             dac_agents = 0.0
+
+            epoch_min_sd = 0.0
+            epoch_vo_angle = 0.0
 
             H = W = 64
             with torch.no_grad():
@@ -1170,6 +1177,9 @@ class ModelTest:
                         epoch_dac += dac_i.sum()
                         dac_agents += dac_mask_i.sum()
 
+                        epoch_min_sd += self.self_distance(candidate_i, tgt_traj_i, tgt_lens_i)
+                        epoch_vo_angle += self.vo_angle(candidate_i, tgt_traj_i, tgt_lens_i)
+
             if self.flow_based_decoder:
                 list_ploss.append(epoch_ploss / epoch_agents)
                 list_qloss.append(epoch_qloss / epoch_agents)
@@ -1195,6 +1205,9 @@ class ModelTest:
 
             list_dao.append(epoch_dao / dao_agents)
             list_dac.append(epoch_dac / dac_agents)
+
+            list_sd.append(epoch_min_sd / epoch_agents)
+            list_angle.append(epoch_vo_angle / epoch_agents)
 
         if self.flow_based_decoder:
             test_ploss = [np.mean(list_ploss), np.std(list_ploss)]
@@ -1225,18 +1238,24 @@ class ModelTest:
         test_ades = (test_minade2, test_avgade2, test_minade3, test_avgade3)
         test_fdes = (test_minfde2, test_avgfde2, test_minfde3, test_avgfde3)
 
+        test_sd = [np.mean(list_sd), np.std(list_sd)]
+        test_angle = [np.mean(list_angle), np.std(list_angle)]
+
         print("--Final Performane Report--")
-        print("minADE3: {:.5f}±{:.5f}, minFDE3: {:.5f}±{:.5f}".format(test_minade3[0], test_minade3[1], test_minfde3[0],
-                                                                      test_minfde3[1]))
-        print("avgADE3: {:.5f}±{:.5f}, avgFDE3: {:.5f}±{:.5f}".format(test_avgade3[0], test_avgade3[1], test_avgfde3[0],
-                                                                      test_avgfde3[1]))
-        print("DAO: {:.5f}±{:.5f}, DAC: {:.5f}±{:.5f}".format(test_dao[0] * 10000.0, test_dao[1] * 10000.0, test_dac[0],
-                                                              test_dac[1]))
-        with open(self.out_dir + '/{}_{}_metric.txt'.format(self.test_ckpt, self.test_partition), 'w') as f:
-            f.write('ADEs: {} \n FDEs: {} \n Qloss: {} \n Ploss: {} \n DAO: {} \n DAC: {}'.format(
-                test_ades, test_fdes, test_qloss, test_ploss, test_dao, test_dac))
-            # pkl.dump('ADEs: {} \n FDEs: {} \n Qloss: {} \n Ploss: {}'.format(
-            #     test_ades, test_fdes, test_qloss, test_ploss), f)
+        print("minADE3: {:.5f}±{:.5f}, minFDE3: {:.5f}±{:.5f}".format(test_minade3[0], test_minade3[1], test_minfde3[0], test_minfde3[1]))
+        print("avgADE3: {:.5f}±{:.5f}, avgFDE3: {:.5f}±{:.5f}".format(test_avgade3[0], test_avgade3[1], test_avgfde3[0], test_avgfde3[1]))
+        print("DAO: {:.5f}±{:.5f}, DAC: {:.5f}±{:.5f}".format(test_dao[0] * 10000.0, test_dao[1] * 10000.0, test_dac[0], test_dac[1]))
+        print("SD: {:.5f}±{:.5f}".format(test_sd[0], test_sd[1]))
+        print("Angle: {:.5f}±{:.5f}".format(test_angle[0]*180/np.pi, test_angle[1]*180/np.pi))
+        with open(self.out_dir + '/metric.pkl', 'wb') as f:
+            pkl.dump({"ADEs": test_ades,
+                      "FDEs": test_fdes,
+                      "Qloss": test_qloss,
+                      "Ploss": test_ploss, 
+                      "DAO": test_dao,
+                      "DAC": test_dac,
+                      "SD": test_sd,
+                      "Angle": test_angle}, f)
 
     @staticmethod
     def q10testsingle(model, batch, device):
@@ -1554,3 +1573,78 @@ class ModelTest:
 
     def map_file(self, scene_id):
         return '{}/map/{}.bin'.format(self.data_dir, scene_id)
+
+    @staticmethod
+    def vo_angle(gen_trajs, tgt_trajs, tgt_lens):
+        def angle_between(v1, v2):
+            v1 = v1+1e-6
+            v2 = v2+1e-6
+            v1_u = v1 / (np.linalg.norm(v1))
+            v2_u = v2 / (np.linalg.norm(v2))
+            return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
+        num_tgt_agents, num_candidates = gen_trajs.shape[:2]
+        angle_sum = 0
+
+        for k in range(num_candidates):
+            gen_trajs_k = gen_trajs[:, k]
+            for i in range(num_tgt_agents):
+                gen_traj_ki = gen_trajs_k[i]
+                tgt_traj_i = tgt_trajs[i]
+                tgt_len_i = tgt_lens[i]
+
+                gen_init_x = gen_traj_ki[:tgt_len_i-1, 0]
+                gen_init_y = gen_traj_ki[:tgt_len_i-1, 1]
+                gen_fin_x = gen_traj_ki[1:tgt_len_i, 0]
+                gen_fin_y = gen_traj_ki[1:tgt_len_i, 1]
+
+                tgt_init_x = tgt_traj_i[:tgt_len_i-1, 0]
+                tgt_init_y = tgt_traj_i[:tgt_len_i-1, 1]
+                tgt_fin_x = tgt_traj_i[1:tgt_len_i, 0]
+                tgt_fin_y = tgt_traj_i[1:tgt_len_i, 1]
+
+                gen_to_tgt_x = tgt_init_x - gen_init_x
+                gen_to_tgt_y = tgt_init_y - gen_init_y
+
+                gen_fin_x = gen_fin_x + gen_to_tgt_x
+                gen_fin_y = gen_fin_y + gen_to_tgt_y
+
+                tgt_vector_x = tgt_fin_x - tgt_init_x
+                tgt_vector_y = tgt_fin_y - tgt_init_y
+                gen_vector_x = gen_fin_x - tgt_init_x
+                gen_vector_y = gen_fin_y - tgt_init_y
+
+                tgt_vectors = (np.concatenate((tgt_vector_x, tgt_vector_y), axis= 0)).T
+                gen_vectors = (np.concatenate((gen_vector_x, gen_vector_y), axis= 0)).T
+                
+                for tgt_vec, gen_vec in zip(tgt_vectors, gen_vectors):
+                    angle_sum += angle_between(tgt_vec, gen_vec)
+        angle_sum = angle_sum/num_candidates/num_tgt_agents
+        return angle_sum
+    
+    def distance_between(point1, point2):
+        return np.sqrt((point1[0] - point2[0])**2 + (point1[1] - point2[1])**2)
+
+    @staticmethod
+    def self_distance(gen_trajs, tgt_trajs, tgt_lens):
+        num_tgt_agents, num_candidates = gen_trajs.shape[:2]
+        multi_fin = np.zeros((num_tgt_agents, num_candidates, 2))
+
+        for k in range(num_candidates):
+            gen_trajs_k = gen_trajs[:, k]
+            for i in range(num_tgt_agents):
+                gen_traj_ki = gen_trajs_k[i]
+                tgt_len_i = tgt_lens[i]
+                multi_fin[i,k] = gen_traj_ki[tgt_len_i-1]
+        
+        sd_total = 0
+        min_sd = 10000000
+        for i in range(num_tgt_agents):
+            curr_agent = multi_fin[i]
+            for k in range(num_candidates-1):
+                curr_candidate = np.tile(curr_agent[k], (num_candidates-k-1, 1))
+                sd = np.min(np.sqrt(np.sum(np.power(curr_candidate - curr_agent[k+1:], 2), axis=1)))
+                if min_sd>sd:
+                    min_sd = sd
+            sd_total+=min_sd
+        sd_total /=num_tgt_agents
+        return sd_total

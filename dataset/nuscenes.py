@@ -13,7 +13,9 @@ from torch.utils.data.dataset import Dataset
 import pdb
 
 # _data_dir = './data/nuscenes_shpark'
-_data_dir = '/home/q10/ws/repos/naverlabs2020/intelpro_trajectory/data/nuscenes'
+# _data_dir = '/home/q10/ws/repos/naverlabs2020/intelpro_trajectory/data/nuscenes'
+_data_dir = '/home/vilab/jegyeong/intelpro_trajectory/data/nuscenes_shpark'
+
 
 class ParallelSim(object):
     def __init__(self, processes):

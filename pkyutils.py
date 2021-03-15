@@ -125,30 +125,31 @@ class NusCustomParser(Dataset):
         else:
             xy_local.append(convert_global_coords_to_local(xy_global[2], ego_pose_xy, ego_pose_rotation))
 
-        # 4. Generate Virtual Agent Trajectory
-        lane_tokens = list(lanes.keys())
-        lanes_disc = [np.array(lanes[token])[:, :2] for token in lane_tokens]
+        # # 4. Generate Virtual Agent Trajectory
+        # lane_tokens = list(lanes.keys())
+        # lanes_disc = [np.array(lanes[token])[:, :2] for token in lane_tokens]
 
-        virtual_mask, virtual_xy = self.agent_layer.generate_virtual_mask(
-            ego_pose_xy, ego_pose_rotation, lanes_disc, sample_token, show_agent=self.show_agent,
-            past_trj_len=4, future_trj_len=6, min_dist=6)
+        # virtual_mask, virtual_xy = self.agent_layer.generate_virtual_mask(
+        #     ego_pose_xy, ego_pose_rotation, lanes_disc, sample_token, show_agent=self.show_agent,
+        #     past_trj_len=4, future_trj_len=6, min_dist=6)
 
         virtual_xy_local = []
+        virtual_mask = None
 
-        # past, future trajectory
-        for path_global in virtual_xy[:2]:
-            pose_xy = []
-            for path_global_i in path_global:
-                if len(path_global_i) == 0:
-                    pose_xy.append(path_global_i)
-                else:
-                    pose_xy.append(convert_global_coords_to_local(path_global_i, ego_pose_xy, ego_pose_rotation))
-            virtual_xy_local.append(pose_xy)
-        # current pose
-        if len(virtual_xy[2]) == 0:
-            virtual_xy_local.append(virtual_xy[2])
-        else:
-            virtual_xy_local.append(convert_global_coords_to_local(virtual_xy[2], ego_pose_xy, ego_pose_rotation))
+        # # past, future trajectory
+        # for path_global in virtual_xy[:2]:
+        #     pose_xy = []
+        #     for path_global_i in path_global:
+        #         if len(path_global_i) == 0:
+        #             pose_xy.append(path_global_i)
+        #         else:
+        #             pose_xy.append(convert_global_coords_to_local(path_global_i, ego_pose_xy, ego_pose_rotation))
+        #     virtual_xy_local.append(pose_xy)
+        # # current pose
+        # if len(virtual_xy[2]) == 0:
+        #     virtual_xy_local.append(virtual_xy[2])
+        # else:
+        #     virtual_xy_local.append(convert_global_coords_to_local(virtual_xy[2], ego_pose_xy, ego_pose_rotation))
 
         return map_masks, map_img, agent_mask, xy_local, virtual_mask, virtual_xy_local, scene_id
 
@@ -259,12 +260,13 @@ class NusToolkit(torch.utils.data.dataset.Dataset):
                 map_img = pickle.load(f)
             with open('{}/prior/{}.bin'.format(self.data_dir, self.ids[idx]), 'rb') as f:
                 prior = pickle.load(f)
-            with open('{}/fake/{}.bin'.format(self.data_dir, self.ids[idx]), 'rb') as f:
-                episode_fake = pickle.load(f)
+            # with open('{}/fake/{}.bin'.format(self.data_dir, self.ids[idx]), 'rb') as f:
+            #     episode_fake = pickle.load(f)
             with open('{}/real/{}.bin'.format(self.data_dir, self.ids[idx]), 'rb') as f:
                 episode_real = pickle.load(f)
 
-            episode_fake.extend([map_img, prior, idx])
+            # episode_fake.extend([map_img, prior, idx])
+            episode_fake = None
             episode_real.extend([map_img, prior, idx])
 
             return episode_fake, episode_real
@@ -288,21 +290,21 @@ class NusToolkit(torch.utils.data.dataset.Dataset):
         data_dir = self.data_dir
         map_dir = os.path.join(data_dir, 'map')
         prior_dir = os.path.join(data_dir, 'prior')
-        fake_dir = os.path.join(data_dir, 'fake')
+        # fake_dir = os.path.join(data_dir, 'fake')
         real_dir = os.path.join(data_dir, 'real')
 
         if not (os.path.isdir(data_dir)):
             os.makedirs(data_dir)
             os.makedirs(map_dir)
             os.makedirs(prior_dir)
-            os.makedirs(fake_dir)
+            # os.makedirs(fake_dir)
             os.makedirs(real_dir)
 
             for idx in tqdm(range(len(self.dataset))):
                 map_masks, map_img, agent_mask, xy_local, virtual_mask, virtual_xy_local, idx = self.dataset[idx]
 
                 agent_past, agent_future, agent_translation = xy_local
-                fake_past, fake_future, fake_translation = virtual_xy_local
+                # fake_past, fake_future, fake_translation = virtual_xy_local
 
                 map_image, prior = self.generateDistanceMaskFromColorMap(map_masks[0], scene_size=(64, 64))
                 with open('{}/{}.bin'.format(map_dir, idx), 'wb') as f:
@@ -310,10 +312,10 @@ class NusToolkit(torch.utils.data.dataset.Dataset):
                 with open('{}/{}.bin'.format(prior_dir, idx), 'wb') as f:
                     pickle.dump(prior, f, pickle.HIGHEST_PROTOCOL)
 
-                # 1) fake agents
-                episode_fake = self.get_episode(fake_past, fake_future, fake_translation)
-                with open('{}/{}.bin'.format(fake_dir, idx), 'wb') as f:
-                    pickle.dump(episode_fake, f, pickle.HIGHEST_PROTOCOL)
+                # # 1) fake agents
+                # episode_fake = self.get_episode(fake_past, fake_future, fake_translation)
+                # with open('{}/{}.bin'.format(fake_dir, idx), 'wb') as f:
+                #     pickle.dump(episode_fake, f, pickle.HIGHEST_PROTOCOL)
 
                 # 2) real agents
                 episode_real = self.get_episode(agent_past, agent_future, agent_translation)
@@ -390,12 +392,14 @@ class DatasetQ10(torch.utils.data.dataset.Dataset):
         self.data_partition = data_partition
 
         n = len(os.listdir(os.path.join(self.data_dir, 'map')))
-
+        
         self.ids = np.arange(n)
         if data_partition == 'train':
             self.ids = self.ids[: int(n * (1 - val_ratio))]
         elif data_partition == 'val':
             self.ids = self.ids[: int(n * val_ratio)]
+        elif data_partition == 'all':
+            pass
 
         if shuffle:
             np.random.shuffle(self.ids)
@@ -406,7 +410,7 @@ class DatasetQ10(torch.utils.data.dataset.Dataset):
         self.curves = []
         self.speeds = []
         self.distances = []
-
+        
         for idx in self.ids:
             with open('{}/{}/{}.bin'.format(self.data_dir, self.data_type, idx), 'rb') as f:
                 # past, past_len, future, future_len, agent_mask, vel, pos, sample_idx = episode
@@ -488,11 +492,13 @@ class DatasetQ10(torch.utils.data.dataset.Dataset):
 
         plt.figure(figsize=(10, 5))
         plt.title('Distribution')
-        plt.hist(self.distances, bins=90, color='royalblue', range=(3, 40))
+        plt.hist(self.distances, bins=90, color='royalblue', range=(0, 20))
         plt.xlabel('Future Path Length (m)')
         plt.ylabel('count')
-        plt.xlim([3, 40])
+        plt.xlim([0, 20])
         plt.show()
+
+        return self.distances
 
 
 def nuscenes_collate(batch, test_set=False):
@@ -603,16 +609,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument('--root', type=str, default='/datasets/nuscene/v1.0-mini')
     parser.add_argument('--version', type=str, default='v1.0-mini')
+    parser.add_argument('--load_dir', type=str, default='../nus_dataset')
     parser.add_argument('--min', type=float, default=None)
     parser.add_argument('--max', type=float, default=None)
-    args = parser.parse_args()
+    # args = parser.parse_args()
+    args = parser.parse_args('--root ../nus_dataset/original_small/v1.0-test_meta \
+--version v1.0-test --load_dir ../nus_dataset'.split(' '))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("device: {}".format(device))
 
     print('min: {}, max: {}'.format(args.min, args.max))
-    pkyLoader = CustomLoader(root=args.root, version=args.version)
-    pkyLoader.saveData(min_angle=args.min, max_angle=args.max, name=args.version)
+    pkyLoader = NusToolkit(root=args.root, version=args.version, load_dir=args.load_dir)
+    pkyLoader.save_dataset()
     print("finished...")
 else:
     print("import:")

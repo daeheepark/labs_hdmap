@@ -4,6 +4,8 @@ import argparse
 import torch
 from torch.utils.data import DataLoader, ChainDataset, random_split
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import cv2
 from tqdm import tqdm
@@ -48,10 +50,11 @@ def train(args):
                                        velocity_const=args.velocity_const, num_candidates=args.num_candidates,
                                        decoding_steps=nfuture, att=crossmodal_attention)
 
-    # ckpt = 'experiment/None_None_fake_AttGlobal_Scene_CAM_NFDecoder__03_January__22_25_/epoch40.pth.tar'
-    # if ckpt is not None:
-    #     checkpoint = torch.load(ckpt)
-    #     model.load_state_dict(checkpoint['model_state'], strict=False)
+    ckpt = args.load_ckpt
+    # print(ckpt)
+    if ckpt is not None:
+        checkpoint = torch.load(ckpt)
+        model.load_state_dict(checkpoint['model_state'], strict=False)
 
     model = model.to(device)
 
@@ -159,7 +162,7 @@ def log_determinant(sigma):
 
 
 class Visualizer:
-    def __init__(self, model, ploss_criterion, root='/datasets/nuscene/v1.0-mini', version='v1.0-mini'):
+    def __init__(self, model, ploss_criterion, root='../datasets/nuscene/v1.0-mini', version='v1.0-mini'):
         self.root = root
         self.version = version
         self.sampling_time = 3
@@ -229,24 +232,25 @@ class Visualizer:
                     plt.plot(path[:, 0], path[:, 1], color='r')
             plt.text(-31, 28, 'ploss: {:.3f}\nqloss: {:.3f}'.format(p_loss[i], q_loss[i]), fontsize=15, color='r')
 
+            # print(results_dir + '/{}.png'.format(i))
             plt.savefig(results_dir + '/{}.png'.format(i), dpi=150)
             plt.pause(0.001)
             plt.cla()
             #if i > 120:
             #    break
 
-        video_name = 'results/{}.avi'.format(results_idx)
+        # video_name = 'results/{}.avi'.format(results_idx)
 
-        images = [img for img in os.listdir(results_dir) if img.endswith(".png")]
-        images = natsort.natsorted(images)
-        frame = cv2.imread(os.path.join(results_dir, images[5]))
-        height, width, layers = frame.shape
+        # images = [img for img in os.listdir(results_dir) if img.endswith(".png")]
+        # images = natsort.natsorted(images)
+        # frame = cv2.imread(os.path.join(results_dir, images[5]))
+        # height, width, layers = frame.shape
 
-        video = cv2.VideoWriter(video_name, 0, 2, (width, height))
-        for image in tqdm(images, total=len(images), desc='video processing'):
-            video.write(cv2.imread(os.path.join(results_dir, image)))
-        cv2.destroyAllWindows()
-        video.release()
+        # video = cv2.VideoWriter(video_name, 0, 2, (width, height))
+        # for image in tqdm(images, total=len(images), desc='video processing'):
+        #     video.write(cv2.imread(os.path.join(results_dir, image)))
+        # cv2.destroyAllWindows()
+        # video.release()
 
     @staticmethod
     def draw_paths(ax, local_paths):
@@ -364,10 +368,12 @@ class Visualizer:
                           num_src_trajs, scene_encoding_, agent_encoded=True,
                           scene_encoded=True)
 
-                if self.ploss_type == 'map':
-                    ploss = self.ploss_criterion(episode_idx, gen_trajs, log_prior, -15.0)
-                elif self.ploss_type == 'mseloss':
-                    ploss = self.ploss_criterion(gen_trajs, tgt_trajs)
+                # if self.ploss_type == 'map':
+                #     ploss = self.ploss_criterion(episode_idx, gen_trajs, log_prior, -15.0)
+                # elif self.ploss_type == 'mseloss':
+                #     ploss = self.ploss_criterion(gen_trajs, tgt_trajs)
+                ploss = self.ploss_criterion(episode_idx, gen_trajs, log_prior, -15.0)
+
 
                 batch_ploss = ploss.mean()
                 batch_loss = batch_qloss + self.beta * batch_ploss
@@ -423,7 +429,7 @@ def visualize(args):
     max_angle = args.max_angle
     print('min angle:', str(min_angle), ', max angle:', str(max_angle))
 
-    dataset = DatasetQ10(version=version, load_dir=load_dir, data_partition='val',
+    dataset = DatasetQ10(version=version, load_dir=load_dir, data_partition='all',
                          shuffle=False, val_ratio=0.3, data_type=data_type, min_angle=min_angle, max_angle=max_angle)
     data_loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False, pin_memory=True,
                              collate_fn=lambda x: nuscenes_collate(x), num_workers=args.num_workers)
@@ -431,7 +437,7 @@ def visualize(args):
     print(f'Test Examples: {len(dataset)}')
 
     ploss_criterion = ploss_criterion.to(device)
-
+    print(len(dataset))
     viz = Visualizer(model, ploss_criterion, root='{}/original_small/{}'.format(load_dir, version), version=version)
     viz.save_to_video(data_loader)
 
@@ -527,12 +533,19 @@ if __name__ == "__main__":
     parser.add_argument('--data_type', type=str, default='real')
     parser.add_argument('--min_angle', type=float, default=None)
     parser.add_argument('--max_angle', type=float, default=None)
-    parser.add_argument('--load_dir', type=str, default='../nus_dataset')
+    parser.add_argument('--load_dir', type=str, default='../datasets/nus_dataset')
     parser.add_argument('--viz', action='store_true')
 
-    args = parser.parse_args()
+    # args = parser.parse_args()
+    args = parser.parse_args('--version v1.0-test --data_type real \
+--ploss_type map \
+--beta 0.1 --batch_size 1 \
+--test_times 1 \
+--test_ckpt experiment/0309_AttTest__09_March__01_21_/ck_91_-12.0503_57.8873_0.7136_1.5714.pth.tar \
+--test_dir results \
+--load_dir ../nus_dataset --viz'.split(' '))
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_devices
+    # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_devices
 
     if args.viz:
         visualize(args)
