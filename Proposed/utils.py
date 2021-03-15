@@ -847,8 +847,17 @@ class ModelTest:
         list_dao = []
         list_dac = []
 
+<<<<<<< HEAD
         list_sd =[]
         list_angle = []
+=======
+        minFSD3 = []
+        maxFSD3 = []
+        stdFD3 = []
+        voAngles = []
+        minFSD3_n = []
+        maxFSD3_n = []
+>>>>>>> b7b2ff74551be9354718a87bf0f7461d17759307
 
         for test_time in range(self.test_times):
 
@@ -895,7 +904,6 @@ class ModelTest:
                 c1 = -self.decoding_steps * np.log(2 * np.pi)
 
                 for b, batch in enumerate(self.data_loader):
-
                     scene_images, log_prior, \
                     agent_masks, \
                     num_src_trajs, src_trajs, src_lens, src_len_idx, \
@@ -903,7 +911,7 @@ class ModelTest:
                     tgt_two_mask, tgt_three_mask, \
                     decode_start_vel, decode_start_pos, scene_id = batch
 
-                    #scene_images[scene_images != 0] = 0
+                    # scene_images[scene_images != 0] = 0
 
                     # Detect dynamic batch size
                     batch_size = scene_images.size(0)
@@ -1060,6 +1068,52 @@ class ModelTest:
 
                     diff = gen_trajs - tgt_trajs.unsqueeze(1)
                     msd_error = (diff[:, :, :, 0] ** 2 + diff[:, :, :, 1] ** 2)
+
+                    # print('######################################')
+                    # print(gen_trajs.size())
+                    # print(gen_trajs[0][:, 0, :].squeeze())  # start
+                    # print(gen_trajs[0][:, 5, :].squeeze())  # final
+                    # print(decode_start_pos[0])
+
+                    def cal_vo_angle(path1, path2):
+                        vo_angles_ = []
+                        for i in range(1, len(path1)):
+                            u = path1[i] - path1[i - 1]
+                            v = path2[i] - path2[i - 1]
+                            vo = torch.acos((u * v).sum() / (torch.norm(u) * torch.norm(v)))
+                            if torch.isnan(vo):
+                                continue
+                            vo_angles_.append(vo)
+                        return torch.FloatTensor(vo_angles_).mean()
+
+                    for agent_idx, paths in enumerate(gen_trajs):
+                        vo_angles = torch.FloatTensor([cal_vo_angle(paths[i], paths[j])
+                                                       for i in range(len(paths) - 1)
+                                                       for j in range(i + 1, len(paths))])
+
+                        f_points = paths[:, 5, :].squeeze() - decode_start_pos[agent_idx]
+                        fsds = torch.FloatTensor([torch.norm(f_points[i] - f_points[j])
+                                                  for i in range(len(f_points) - 1)
+                                                  for j in range(i + 1, len(f_points))])
+                        min_fsd = torch.min(fsds)
+                        max_fsd = torch.max(fsds)
+                        # std_fsd = torch.std(fsds)
+                        std_fd = torch.std(f_points[:, 0]) + torch.std(f_points[:, 1])
+                        vo_angle_mean = torch.mean(vo_angles)
+
+                        fsds_n = torch.FloatTensor([torch.norm(f_points[i] - f_points[j])
+                                                    / (torch.norm(f_points[i]) + torch.norm(f_points[j]))
+                                                    for i in range(len(f_points) - 1)
+                                                    for j in range(i + 1, len(f_points))])
+                        min_fsd_n = torch.min(fsds_n)
+                        max_fsd_n = torch.max(fsds_n)
+                        minFSD3_n.append(min_fsd_n)
+                        maxFSD3_n.append(max_fsd_n)
+
+                        minFSD3.append(min_fsd)
+                        maxFSD3.append(max_fsd)
+                        stdFD3.append(std_fd)
+                        voAngles.append(vo_angle_mean)
 
                     num_agents = gen_trajs.size(0)
                     num_agents2 = rs_error2.size(0)
@@ -1238,6 +1292,7 @@ class ModelTest:
         test_ades = (test_minade2, test_avgade2, test_minade3, test_avgade3)
         test_fdes = (test_minfde2, test_avgfde2, test_minfde3, test_avgfde3)
 
+<<<<<<< HEAD
         test_sd = [np.mean(list_sd), np.std(list_sd)]
         test_angle = [np.mean(list_angle), np.std(list_angle)]
 
@@ -1256,6 +1311,61 @@ class ModelTest:
                       "DAC": test_dac,
                       "SD": test_sd,
                       "Angle": test_angle}, f)
+=======
+        print("--Final Performance Report--")
+        print("minADE3: {:.5f}±{:.5f}, minFDE3: {:.5f}±{:.5f}".format(test_minade3[0], test_minade3[1], test_minfde3[0],
+                                                                      test_minfde3[1]))
+        print("avgADE3: {:.5f}±{:.5f}, avgFDE3: {:.5f}±{:.5f}".format(test_avgade3[0], test_avgade3[1], test_avgfde3[0],
+                                                                      test_avgfde3[1]))
+        print("DAO: {:.5f}±{:.5f}, DAC: {:.5f}±{:.5f}".format(test_dao[0] * 10000.0, test_dao[1] * 10000.0, test_dac[0],
+                                                              test_dac[1]))
+
+        minFSD3 = torch.FloatTensor(minFSD3)
+        maxFSD3 = torch.FloatTensor(maxFSD3)
+        stdFD3 = torch.FloatTensor(stdFD3)
+        voAngles = torch.FloatTensor(voAngles)
+        minFSD3_n = torch.FloatTensor(minFSD3_n)
+        maxFSD3_n = torch.FloatTensor(maxFSD3_n)
+        print("minFSD3_n: {:.5f}".format(minFSD3_n.mean()))
+        print("maxFSD3_n: {:.5f}".format(maxFSD3_n.mean()))
+        print("minFSD3: {:.5f}".format(minFSD3.mean()))
+        print("maxFSD3: {:.5f}".format(maxFSD3.mean()))
+        print("stdFD3: {:.5f}".format(stdFD3.mean()))
+        print("voAngles: {:.5f}".format(voAngles.mean()))
+
+        plt.figure(figsize=(36, 4))
+        plt.subplot(1, 4, 1)
+        plt.title('minFSD3')
+        plt.hist(minFSD3.view(-1).numpy(), bins=25)
+        plt.xlabel('minFSD3')
+        plt.ylabel('count')
+
+        plt.subplot(1, 4, 2)
+        plt.title('maxFSD3')
+        plt.hist(maxFSD3.view(-1).numpy(), bins=25)
+        plt.xlabel('maxFSD3')
+        plt.ylabel('count')
+
+        plt.subplot(1, 4, 3)
+        plt.title('stdFD3')
+        plt.hist(stdFD3.view(-1).numpy(), bins=25)
+        plt.xlabel('stdFD3')
+        plt.ylabel('count')
+
+        plt.subplot(1, 4, 4)
+        plt.title('voAngles')
+        plt.hist(voAngles.view(-1).numpy(), bins=25)
+        plt.xlabel('voAngles')
+        plt.ylabel('count')
+
+        plt.show()
+
+        with open(self.out_dir + '/{}_{}_metric.txt'.format(self.test_ckpt, self.test_partition), 'w') as f:
+            f.write('ADEs: {} \n FDEs: {} \n Qloss: {} \n Ploss: {} \n DAO: {} \n DAC: {}'.format(
+                test_ades, test_fdes, test_qloss, test_ploss, test_dao, test_dac))
+            # pkl.dump('ADEs: {} \n FDEs: {} \n Qloss: {} \n Ploss: {}'.format(
+            #     test_ades, test_fdes, test_qloss, test_ploss), f)
+>>>>>>> b7b2ff74551be9354718a87bf0f7461d17759307
 
     @staticmethod
     def q10testsingle(model, batch, device):

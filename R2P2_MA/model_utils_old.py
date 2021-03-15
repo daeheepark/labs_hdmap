@@ -50,7 +50,7 @@ class MSE_Ploss(nn.Module):
             raise ValueError()
 
         # ploss = ((pred_traj - tgt_traj.unsqueeze(1)) ** 2).sum((2,3)).mean(1)
-        ploss = torch.min(((pred_traj - tgt_traj.unsqueeze(1)) ** 2).sum((2,3)), dim=1).values
+        ploss = torch.min(((pred_traj - tgt_traj.unsqueeze(1)) ** 2).sum((2, 3)), 1).values
         
         return ploss
 

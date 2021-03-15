@@ -4,8 +4,6 @@ import time
 import numpy as np
 import datetime
 
-os.environ['QT_QPA_PLATFORM']='offscreen'
-
 import pickle as pkl
 
 import matplotlib.pyplot as plt
@@ -582,7 +580,7 @@ class ModelTest:
             self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3] ) + '.png' for x in scene_id]
 
         elif args.dataset == "nuscenes":
-            _data_dir = './data/nuscenes_shpark'
+            _data_dir = './data/nuscenes'
             self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3]) + '.pkl' for x in scene_id]
 
         elif args.dataset == "carla":

@@ -1,5 +1,6 @@
 """ Code for the main model variants. """
 
+from collections import OrderedDict
 import torch
 import torch.nn as nn
 from MATF.models import *
@@ -319,7 +320,10 @@ class Global_Scene_CAM_NFDecoder(CAM):
         self.decoding_steps = decoding_steps    
         self.num_candidates = num_candidates
 
+        
+
     def forward(self, src_trajs_or_src_encoding, src_lens, future_agent_masks, episode_idx, decode_start_vel, decode_start_pos, num_past_agents, scene_or_scene_encoding, agent_encoded=False, scene_encoded=False):
+        # forward : test, infer : train
         """
         input shape
         src_trajs_or_src_encoding:
@@ -432,3 +436,154 @@ class Global_Scene_CAM_NFDecoder(CAM):
         z, mu, sigma = self.crossmodal_dynamic_decoder.infer(tgt_trajs, context_encoding, decode_start_vel, decode_start_pos, global_scene_encoding_, episode_idx)
         return z, mu, sigma, agent_encodings_, (local_scene_encoding_, global_scene_encoding_)
 
+# GlobalScene + LocalScene + CAM + NF & AttGlobalScene + LocalScene + CAM + NF
+class Global_Scene_CAM_DSF_NFDecoder(CAM):
+    """
+    Model2: Cross-agent Attention & Normalizing Flow Decoder
+    """
+    def __init__(self, device, agent_embed_dim, nfuture, att_dropout, velocity_const, num_candidates, decoding_steps, att=True):
+
+        super(Global_Scene_CAM_DSF_NFDecoder, self).__init__(device, agent_embed_dim, nfuture, att_dropout)
+
+        # self.self_attention = SelfAttention(d_model=agent_embed_dim, d_k=agent_embed_dim, d_v=agent_embed_dim, n_head=1, dropout=att_dropout)
+        # self.layer_norm = nn.LayerNorm(agent_embed_dim, eps=1e-6)
+
+        self.cnn_model = NewModelShallowCNN()
+        self.context_fusion = ContextFusion(hidden_size=agent_embed_dim)
+        self.crossmodal_dynamic_decoder = CrossModalDynamic_DSFDecoder(decoding_steps=decoding_steps, velocity_const=velocity_const, att=att)
+
+        self.interpolator = Bilinear_Interpolation()
+        self.decoding_steps = decoding_steps    
+        self.num_candidates = num_candidates
+
+        self.epsdim = 2*decoding_steps*self.num_candidates
+        self.dsfnet = nn.Sequential(OrderedDict({
+            'dsf_1' : nn.Linear((agent_embed_dim*self.num_candidates + self.epsdim), 128), 
+            # 'act'   : nn.ReLU(),
+            'dsf_2' : nn.Linear(128, 64),
+            # 'act2'  : nn.ReLU(),
+            'dsf_3' : nn.Linear(64, 2*decoding_steps*self.num_candidates)
+        }))
+
+    def forward(self, src_trajs_or_src_encoding, src_lens, future_agent_masks, episode_idx, decode_start_vel, decode_start_pos, num_past_agents, scene_or_scene_encoding, agent_encoded=False, scene_encoded=False):
+        # forward : test, infer : train
+        """
+        input shape
+        src_trajs_or_src_encoding:
+          A x Te x 2 if src_trajs
+        src_lens: A
+        future_agent_masks: A
+        decode_start_vel: A X 2
+        decode_start_pos: A X 2
+        output shape
+        x: A X Td X 2
+        mu: A X Td X 2
+        sigma: A X Td X 2 X 2
+        """
+        num_agents = src_trajs_or_src_encoding.size(0)	
+        batch_size = num_past_agents.size(0)
+        device = src_trajs_or_src_encoding.device	
+
+        if scene_encoded:	
+            (local_scene_encoding_, global_scene_encoding_) = scene_or_scene_encoding	
+        else:	
+            local_scene_encoding_, global_scene_encoding_ = self.cnn_model(scene_or_scene_encoding)	
+            global_scene_encoding_ = global_scene_encoding_.permute(0,2,3,1) # B x C x H x W >> B x H x W x C
+            channel_dim = global_scene_encoding_.size(-1)
+            global_scene_encoding_ = global_scene_encoding_.reshape((batch_size, -1, channel_dim)) # H, W are flattened 
+
+        if agent_encoded:
+            agent_encodings_ = src_trajs_or_src_encoding # (Ad*num_cand X Dim)
+        else:
+            agent_encodings_ = self.encoder(src_trajs_or_src_encoding, src_lens, future_agent_masks, num_past_agents) # (Ad X Dim)
+        
+        x = []
+        mu = []
+        sigma = []
+        z = torch.normal(mean=0.0, std=1.0, size=(num_agents*self.num_candidates, self.decoding_steps*2), device=device)	
+        
+
+        episode_idx = episode_idx.repeat_interleave(self.num_candidates)
+        agent_encodings = agent_encodings_.repeat_interleave(self.num_candidates, dim=0)	
+        decode_start_vel = decode_start_vel.repeat_interleave(self.num_candidates, dim=0)	
+        decode_start_pos = decode_start_pos.repeat_interleave(self.num_candidates, dim=0)
+
+        agent_encodings__ = agent_encodings_.repeat_interleave(self.num_candidates, dim=1)
+
+        eps = torch.normal(mean=0.0, std=1.0, size=(agent_encodings__.size(0),self.epsdim), device=device)	
+        catt = torch.cat((agent_encodings__,eps), dim=-1)
+        # catt = catt.reshape((-1, self.num_candidates*catt.size(1)))
+        z_dsf = self.dsfnet(catt) #TODO: crossmodel_dynamic_decoder 수정하기. 원래는 K 샘플 모두 같은 z를 공유, 제안한 방법에서는 각자 샘플이 다른 z 사용. decoder 구조 바꿔야 함. 
+        z_dsf = z_dsf.reshape((-1, int(z_dsf.size(1)/6)))
+
+        x_flat = torch.zeros_like(z)
+        x_prev = decode_start_pos
+        dx = decode_start_vel
+        h = None
+        for i in range(self.decoding_steps):
+            z_t = z_dsf[:, i*2:(i+1)*2]
+            x_flat[:, i*2:(i+1)*2] = x_prev
+
+            interpolated_feature, _ = self.interpolator(episode_idx, x_prev.unsqueeze(-2), local_scene_encoding_, 0.0) # [A X 6]	
+            interpolated_feature = interpolated_feature.squeeze(-2)	
+            context_encoding, _ = self.context_fusion(agent_encodings, interpolated_feature) # [A X 50]	
+
+            x_t, mu_t, sigma_t, h = self.crossmodal_dynamic_decoder(z_t, x_flat, h, context_encoding, dx, x_prev, global_scene_encoding_, episode_idx)
+
+            x.append(x_t)
+            mu.append(mu_t)
+            sigma.append(sigma_t)
+
+            dx = x_t - x_prev
+            x_prev = x_t
+            x_flat = x_flat.clone()
+
+        x = torch.stack(x, dim=1).reshape(num_agents, self.num_candidates, self.decoding_steps, 2) # x: Na X Nc X Td X 2	
+        z = z_dsf.reshape(num_agents, self.num_candidates, self.decoding_steps*2)	
+        mu = torch.stack(mu, dim=1).reshape(num_agents, self.num_candidates, self.decoding_steps, 2) # mu: Na X Nc X Td X 2	
+        sigma = torch.stack(sigma, dim=1).reshape(num_agents, self.num_candidates, self.decoding_steps, 2, 2) # sigma: Na X Nc X Td X 2 X 2	
+
+        return x, z, mu, sigma	
+
+    def infer(self, tgt_trajs, src_trajs, src_lens, future_agent_masks, episode_idx, decode_start_vel, decode_start_pos, num_past_agents, scene):
+        """
+        input shape
+        tgt_trajs: Ad X Td X 2
+        src_trajs: Ae X Te X 2
+        src_lens: Ae
+        future_agent_masks: Ae
+        episode_idx: A	
+        decode_start_vel: Ad X 2
+        decode_start_pos: Ad X 2
+        num_past_agents: B // sums up to Ae
+        scene: B X Ci X H X W	
+
+        output shape
+        z: Ad X Td X 2
+        mu: Ad X Td X 2
+        sigma: Ad X Td X 2 X 2
+        agent_encodings_: Ad X Dim
+        """
+
+        batch_size = num_past_agents.size(0)
+
+        local_scene_encoding_, global_scene_encoding_ = self.cnn_model(scene)	
+        agent_encodings_ = self.encoder(src_trajs, src_lens, future_agent_masks, num_past_agents) # (B X Dim)
+        
+        init_loc = decode_start_pos.unsqueeze(1) # [A X 1 X 2] Initial location	
+        prev_locs = tgt_trajs[:, :-1, :] # [A X (Td -1) X 2] Unrolling positions	
+        interp_locs = torch.cat((init_loc, prev_locs), dim=1) # [A X Td X 2]	
+        interpolated_feature, _ = self.interpolator(episode_idx, interp_locs, local_scene_encoding_, 0.0) # [A X Td X Ce]	
+
+        # Repeat motion encdoing for unrollig time
+        agent_encodings = agent_encodings_.unsqueeze(dim=1) # (B X 1 X Dim)
+        agent_encodings = agent_encodings.expand(-1, self.decoding_steps, -1) # [B X T X Dim]
+
+        context_encoding, _  = self.context_fusion(agent_encodings, interpolated_feature) # [A X Td X 50]	
+
+        global_scene_encoding_ = global_scene_encoding_.permute(0,2,3,1) # B x C x H x W >> B x H x W x C
+        channel_dim = global_scene_encoding_.size(-1)
+        global_scene_encoding_ = global_scene_encoding_.reshape((batch_size, -1, channel_dim)) # H, W are flattened 
+
+        z, mu, sigma = self.crossmodal_dynamic_decoder.infer(tgt_trajs, context_encoding, decode_start_vel, decode_start_pos, global_scene_encoding_, episode_idx)
+        return z, mu, sigma, agent_encodings_, (local_scene_encoding_, global_scene_encoding_)

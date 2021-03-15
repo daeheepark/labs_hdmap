@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import cv2
 from tqdm import tqdm
 
-from Proposed.models import Global_Scene_CAM_NFDecoder
+from Proposed.models import Global_Scene_CAM_NFDecoder, Global_Scene_CAM_DSF_NFDecoder
 from Proposed.utils import ModelTrainer, ModelTest
 from R2P2_MA.model_utils import MSE_Ploss, Interpolated_Ploss
 
@@ -45,10 +45,15 @@ def train(args):
     else:
         crossmodal_attention = False
 
-    model = Global_Scene_CAM_NFDecoder(device=device, agent_embed_dim=args.agent_embed_dim, nfuture=nfuture,
-                                       att_dropout=args.att_dropout,
-                                       velocity_const=args.velocity_const, num_candidates=args.num_candidates,
-                                       decoding_steps=nfuture, att=crossmodal_attention)
+    # model = Global_Scene_CAM_NFDecoder(device=device, agent_embed_dim=args.agent_embed_dim, nfuture=nfuture,
+    #                                    att_dropout=args.att_dropout,
+    #                                    velocity_const=args.velocity_const, num_candidates=args.num_candidates,
+    #                                    decoding_steps=nfuture, att=crossmodal_attention)
+
+    model = Global_Scene_CAM_DSF_NFDecoder(device=device, agent_embed_dim=args.agent_embed_dim, nfuture=nfuture,
+                                           att_dropout=args.att_dropout,
+                                           velocity_const=args.velocity_const, num_candidates=args.num_candidates,
+                                           decoding_steps=nfuture, att=crossmodal_attention)
 
     ckpt = args.load_ckpt
     # print(ckpt)
@@ -110,10 +115,14 @@ def test(args):
         else:
             crossmodal_attention = False
 
-        model = Global_Scene_CAM_NFDecoder(device=device, agent_embed_dim=args.agent_embed_dim, nfuture=nfuture,
-                                           att_dropout=args.att_dropout,
-                                           velocity_const=args.velocity_const, num_candidates=args.num_candidates,
-                                           decoding_steps=nfuture, att=crossmodal_attention)
+        # model = Global_Scene_CAM_NFDecoder(device=device, agent_embed_dim=args.agent_embed_dim, nfuture=nfuture,
+        #                                    att_dropout=args.att_dropout,
+        #                                    velocity_const=args.velocity_const, num_candidates=args.num_candidates,
+        #                                    decoding_steps=nfuture, att=crossmodal_attention)
+        model = Global_Scene_CAM_DSF_NFDecoder(device=device, agent_embed_dim=args.agent_embed_dim, nfuture=nfuture,
+                                               att_dropout=args.att_dropout,
+                                               velocity_const=args.velocity_const, num_candidates=args.num_candidates,
+                                               decoding_steps=nfuture, att=crossmodal_attention)
         ploss_type = args.ploss_type
 
         if ploss_type == 'mseloss':
@@ -122,6 +131,9 @@ def test(args):
         else:
             from R2P2_MA.model_utils import Interpolated_Ploss
             ploss_criterion = Interpolated_Ploss()
+
+    elif args.model_type == 'Global_Scene_CAM_DSF_NFDecoder':
+        pass
 
     else:
         raise ValueError("Unknown model type {:s}.".format(args.model_type))
@@ -168,11 +180,11 @@ class Visualizer:
         self.sampling_time = 3
         self.agent_time = 0  # zero for static mask, non-zero for overlap
         self.layer_names = ['drivable_area', 'road_segment', 'road_block',
-                       'lane', 'ped_crossing', 'walkway', 'stop_line',
-                       'carpark_area', 'road_divider', 'lane_divider']
+                            'lane', 'ped_crossing', 'walkway', 'stop_line',
+                            'carpark_area', 'road_divider', 'lane_divider']
         self.colors = [(255, 255, 255), (100, 255, 255), (255, 100, 255),
-                  (255, 255, 100), (100, 100, 255), (100, 255, 100), (255, 100, 100),
-                  (100, 100, 100), (50, 100, 50), (200, 50, 50), ]
+                       (255, 255, 100), (100, 100, 255), (100, 255, 100), (255, 100, 100),
+                       (100, 100, 100), (50, 100, 50), (200, 50, 50), ]
 
         self.dataset = NusCustomParser(
             root=self.root,
@@ -236,7 +248,7 @@ class Visualizer:
             plt.savefig(results_dir + '/{}.png'.format(i), dpi=150)
             plt.pause(0.001)
             plt.cla()
-            #if i > 120:
+            # if i > 120:
             #    break
 
         # video_name = 'results/{}.avi'.format(results_idx)
@@ -304,7 +316,7 @@ class Visualizer:
                 tgt_two_mask, tgt_three_mask, \
                 decode_start_vel, decode_start_pos, scene_id = batch
 
-                #scene_images[scene_images != 0] = 0
+                # scene_images[scene_images != 0] = 0
 
                 # Detect dynamic batch size
                 batch_size = scene_images.size(0)
@@ -364,9 +376,9 @@ class Visualizer:
 
                 gen_trajs, z, mu, sigma = \
                     self.model(motion_encoding_, src_lens, agent_tgt_three_mask,
-                          episode_idx, decode_start_vel, decode_start_pos,
-                          num_src_trajs, scene_encoding_, agent_encoded=True,
-                          scene_encoded=True)
+                               episode_idx, decode_start_vel, decode_start_pos,
+                               num_src_trajs, scene_encoding_, agent_encoded=True,
+                               scene_encoded=True)
 
                 # if self.ploss_type == 'map':
                 #     ploss = self.ploss_criterion(episode_idx, gen_trajs, log_prior, -15.0)
@@ -388,6 +400,94 @@ class Visualizer:
         return results_idx, results_predicted, results_ploss, results_qloss, results_loss, results_pose
 
 
+def posthoc(args):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    scene_channels = 5 if args.map_version == '2.1' else 3
+    nfuture = int(3 * args.sampling_rate)
+
+    from Proposed.models import Global_Scene_CAM_DSF_NFDecoder
+    from Proposed.posthoc_utils import DSFTrainer, ModelDSFTest
+
+    if args.model_type == 'AttGlobal_Scene_CAM_NFDecoder':
+        crossmodal_attention = True
+    else:
+        crossmodal_attention = False
+    model = Global_Scene_CAM_DSF_NFDecoder(device=device, agent_embed_dim=args.agent_embed_dim, nfuture=nfuture,
+                                           att_dropout=args.att_dropout,
+                                           velocity_const=args.velocity_const, num_candidates=args.num_candidates,
+                                           decoding_steps=nfuture, att=crossmodal_attention)
+
+    use_scene = True
+    scene_size = (64, 64)
+    ploss_type = args.ploss_type
+
+    if ploss_type == 'mseloss':
+        from R2P2_MA.model_utils import MSE_Ploss
+        ploss_criterion = MSE_Ploss().to(device)
+    elif ploss_type == 'map':
+        from R2P2_MA.model_utils import Interpolated_Ploss
+        ploss_criterion = Interpolated_Ploss().to(device)
+    elif ploss_type == 'all':
+        from R2P2_MA.model_utils import MSE_Ploss, Interpolated_Ploss
+        ploss_criterion = (MSE_Ploss().to(device), Interpolated_Ploss().to(device))
+
+    model = model.to(device)
+
+    from dataset.nuscenes import NuscenesDataset, nuscenes_collate
+
+    # 3) load dataset
+    version = args.version
+    data_type = args.data_type
+    load_dir = args.load_dir
+    min_angle = args.min_angle
+    max_angle = args.max_angle
+    print('min angle:', str(min_angle), ', max angle:', str(max_angle))
+
+    train_dataset = DatasetQ10(version=version, load_dir=load_dir, data_partition='train',
+                               shuffle=True, val_ratio=0.3, data_type=data_type, min_angle=min_angle,
+                               max_angle=max_angle)
+
+    val_dataset = DatasetQ10(version=version, load_dir=load_dir, data_partition='val',
+                             shuffle=False, val_ratio=0.3, data_type='real', min_angle=min_angle,
+                             max_angle=max_angle)
+
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False, pin_memory=True,
+                              collate_fn=lambda x: nuscenes_collate(x), num_workers=args.num_workers)
+    valid_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, pin_memory=True,
+                              collate_fn=lambda x: nuscenes_collate(x), num_workers=1)
+
+    print(f'Train Examples: {len(train_dataset)} | Valid Examples: {len(val_dataset)}')
+
+    # Model optimizer
+    if args.optimizer == 'adam':
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=1e-4)
+    elif args.optimizer == 'sgd':
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.learning_rate, momentum=0.9, weight_decay=1e-4)
+    else:
+        optimizer = None
+
+    # Trainer
+    exp_path = args.exp_path
+
+    trainer = DSFTrainer(model, train_loader, valid_loader, optimizer, exp_path, args, device, ploss_criterion)
+    trainer.traindsf(args.num_epochs)
+
+    # tester = ModelDSFTest(model, train_loader, args, device, ploss_criterion)
+    # tester.run_draw()
+
+    # if not os.path.isfile(args.posthoc_tune):
+    #     print('training from initial...')
+    #
+    #     trainer = DSFTrainer(model, train_loader, valid_loader, optimizer, exp_path, args, device, ploss_criterion)
+    #     trainer.traindsf(args.num_epochs)
+    #
+    # else:
+    #     print('pretrained weight: {}'.format(args.posthoc_tune))
+    #
+    #     tester = ModelDSFTest(model, train_loader, args, device, ploss_criterion)
+    #     tester.run_draw()
+
+
 def visualize(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     nfuture = int(3 * args.sampling_rate)
@@ -398,10 +498,15 @@ def visualize(args):
         else:
             crossmodal_attention = False
 
-        model = Global_Scene_CAM_NFDecoder(device=device, agent_embed_dim=args.agent_embed_dim, nfuture=nfuture,
-                                           att_dropout=args.att_dropout,
-                                           velocity_const=args.velocity_const, num_candidates=args.num_candidates,
-                                           decoding_steps=nfuture, att=crossmodal_attention)
+        # model = Global_Scene_CAM_NFDecoder(device=device, agent_embed_dim=args.agent_embed_dim, nfuture=nfuture,
+        #                                    att_dropout=args.att_dropout,
+        #                                    velocity_const=args.velocity_const, num_candidates=args.num_candidates,
+        #                                    decoding_steps=nfuture, att=crossmodal_attention)
+        model = Global_Scene_CAM_DSF_NFDecoder(device=device, agent_embed_dim=args.agent_embed_dim, nfuture=nfuture,
+                                               att_dropout=args.att_dropout,
+                                               velocity_const=args.velocity_const, num_candidates=args.num_candidates,
+                                               decoding_steps=nfuture, att=crossmodal_attention)
+
         ploss_type = args.ploss_type
 
         if ploss_type == 'mseloss':
@@ -473,7 +578,7 @@ if __name__ == "__main__":
                         help="Sampling Rate for Encoding/Decoding sequences")  # Hz | 10 frames per sec % sampling_interval=5 => 2 Hz
 
     # Scene Context Parameters
-    # parser.add_argument('--map_version', type=str, default='2.0', help="Map version")
+    parser.add_argument('--map_version', type=str, default='2.0', help="Map version")
     # ## Only used for MATFs
     # parser.add_argument('--scene_dropout', type=float, default=0.5, help="")
     # parser.add_argument('--scene_encoder', type=str, default='ShallowCNN', help="ShallowCNN | ResNet")
@@ -536,6 +641,7 @@ if __name__ == "__main__":
     parser.add_argument('--load_dir', type=str, default='../datasets/nus_dataset')
     parser.add_argument('--viz', action='store_true')
 
+<<<<<<< HEAD
     # args = parser.parse_args()
     args = parser.parse_args('--version v1.0-test --data_type real \
 --ploss_type map \
@@ -544,10 +650,45 @@ if __name__ == "__main__":
 --test_ckpt experiment/0309_AttTest__09_March__01_21_/ck_91_-12.0503_57.8873_0.7136_1.5714.pth.tar \
 --test_dir results \
 --load_dir ../nus_dataset --viz'.split(' '))
+=======
+    parser.add_argument('--posthoc', action='store_true')
+    parser.add_argument('--posthoc_tune', default=None, help="Post-hoc tunning for dsf network")
+    parser.add_argument('--post_epochs', type=int, default=None, help='Training iteration of post-hoc tunning')
+
+    parser.add_argument('--gamma', type=float, default=0.5)
+    parser.add_argument('--lamb', type=float, default=0.5)
+
+    # args = parser.parse_args()
+    lamb = 10.0  # diversity loss
+    gamma = 10.0  # map loss
+
+    beta = 1.0
+    # test_path = 'experiment/beta_1.0_gamma_10.0_lamb_0.1_clamp_32_mse_map__04_February__04_01_/epoch30.pth.tar'
+    test_path = 'experiment/None_None_real_AttGlobal_Scene_CAM_NFDecoder__03_January__03_55_/epoch100.pth.tar'
+
+    pretrained_path = 'experiment/None_None_real_AttGlobal_Scene_CAM_NFDecoder__03_January__03_55_/epoch100.pth.tar'
+
+#     args = parser.parse_args('--tag beta_{}_gamma_{}_lamb_{}_clamp_32_mse_map --model_type Global_Scene_CAM_DSF_NFDecoder \
+# --batch_size 128 --num_epochs 30 --agent_embed_dim 128 \
+# --num_candidates 6 --test_ckpt {} --test_partition val --test_dir ./test \
+# --posthoc_tune {} --ploss_type all \
+# --post_epochs 30 --learning_rate 1e-3 --test_times 1 --beta {} \
+# --version v1.0-trainval --data_type real --min_angle 0.001745 \
+# --posthoc --gamma {} --lamb {}'.format(beta, gamma, lamb, test_path, pretrained_path, beta, gamma, lamb).split(' '))
+
+#     args = parser.parse_args('--version v1.0-mini --data_type real --ploss_type mseloss \
+# --beta 0.1 --batch_size 1 --test_ckpt {} --test_dir test_results --min_angle 0.001745 --viz'.format(test_path).split(' '))
+
+# 0.1도: 0.001745, 5도: 0.0872665, 10도: 0.174533
+    args = parser.parse_args('--version v1.0-trainval --data_type real --ploss_type mseloss --min_angle 0.001745 \
+--beta 0.1 --batch_size 3 --test_ckpt {} --test_times 1 --test_dir test_results'.format(test_path).split(' '))
+>>>>>>> b7b2ff74551be9354718a87bf0f7461d17759307
 
     # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_devices
 
-    if args.viz:
+    if args.posthoc:
+        posthoc(args)
+    elif args.viz:
         visualize(args)
     elif args.test_ckpt is not None:
         test(args)

@@ -2,6 +2,8 @@
     of various model architecures. """
 
 import math
+from abc import ABC
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -486,7 +488,6 @@ class DynamicDecoder(nn.Module):
         return x, mu, sigma, h
 
 
-
 class CrossModalDynamicDecoder(nn.Module):
     """
     Dynamic Decoder for R2P2 RNN
@@ -655,6 +656,199 @@ class CrossModalDynamicDecoder(nn.Module):
         # vt = v.transpose(-2, -1)
         # sigma = torch.matmul(v * torch.exp(e).unsqueeze(-2), vt) # B X 2 X 2
         
+        # New matrix Exponential
+        # sigma_sym = [[a, b], [b, d]]
+        b = sigma_hat[:, 0, 1] + sigma_hat[:, 1, 0]
+        apd_2 = sigma_hat[:, 0, 0] + sigma_hat[:, 1, 1] # (a+d) / 2
+        amd_2 = sigma_hat[:, 0, 0] - sigma_hat[:, 1, 1] # (a-d) / 2
+        delta = torch.sqrt(amd_2 ** 2 + b ** 2)
+        sinh = torch.sinh(delta)
+        cosh = torch.cosh(delta)
+
+        sigma = torch.zeros_like(sigma_hat)
+
+        tmp1 = sinh / delta
+        tmp2 = amd_2 / tmp1
+
+        sigma[:, 0, 0] = cosh + tmp2
+        sigma[:, 0, 1] = b * tmp1
+        sigma[:, 1, 0] = sigma[:, 0, 1]
+        sigma[:, 1, 1] = cosh - tmp2
+        sigma *= torch.exp(apd_2).unsqueeze(-1).unsqueeze(-1)
+
+        x = sigma.matmul(z.unsqueeze(-1)).squeeze(-1) + mu
+
+        return x, mu, sigma, h
+
+
+class CrossModalDynamic_DSFDecoder(nn.Module, ABC):
+    """
+    Dynamic Decoder for R2P2 RNN
+    """
+    def __init__(self, image_dim=32, hidden_size=150, context_dim=50, decoding_steps=6, velocity_const=0.5, att=True):
+        super(CrossModalDynamic_DSFDecoder, self).__init__()
+        self.velocity_const = velocity_const
+        self.decoding_steps = decoding_steps
+        # self.lstm = nn.LSTM(decoding_steps*2, hidden_size, 1)
+        self.gru = nn.GRU(input_size=decoding_steps*2, hidden_size=hidden_size, num_layers=1)
+        self.crossmodal_attention = CrossModalAttention(encoder_dim=image_dim, decoder_dim=hidden_size, attention_dim=hidden_size, att=att) # map2agent attention
+        self.mlp = nn.Sequential(
+            nn.Linear(hidden_size+context_dim+image_dim, 50),
+            nn.Softplus(),
+            nn.Linear(50, 50),
+            nn.Tanh(),
+            nn.Linear(50, 6) # DON'T USE ACTIVATION AT THE TOP MOST LAYER
+        )
+
+    def infer(self, x, static, init_velocity, init_position, global_scene_encoding, episode_idx):
+        '''
+        input shape
+        x: A X Td X 2 // future trj coordindates
+        static: A X Td X 50 // past trj encoding
+        init_velocity: A X 2
+        init_position: A X 2
+
+        output shape
+        z : A X Td X 2
+        mu: A X Td X 2
+        sigma: A X Td X 2 X 2
+        '''
+
+        # Detect dynamic batch size
+        batch_size = x.size(0)
+
+        # Detect prediction length
+        T = x.size(1) # T: Prediction Time Length
+
+        # Build the state differences for each timestep
+        dx = x[:, 1:, :] - x[:, :-1, :] # B X (T-1) X 2
+        dx = torch.cat((init_velocity.unsqueeze(1), dx), dim=1) # B X T X 2
+
+        # Build the previous states for each timestep
+        x_prev = x[:, :-1, :] # B X (T-1) X 2
+        x_prev = torch.cat((init_position.unsqueeze(1), x_prev), dim=1) # B X T X 2
+
+        # Build the flattend & zero padded previous states for GRU input
+        x_flat = x_prev.reshape((batch_size, -1)) # B X T X 2 >> B X (T*2)
+        x_flat = x_flat.unsqueeze(0).repeat(self.decoding_steps, 1, 1) # T X B X (T*2)
+        for i in range(T):
+            x_flat[i, :, (i+1)*2:] = 0.0
+
+        # Get attn for all timesteps and agents
+        dynamic_encoding, _ = self.gru(x_flat) # dynamic_encoding: T X B X 150
+        dynamic_encoding = dynamic_encoding.transpose(0, 1)
+        dynamic_encoding_ = dynamic_encoding.reshape(batch_size * T, -1)
+        episode_idx_ = episode_idx.repeat_interleave(T)
+
+        att_scenes, alpha = self.crossmodal_attention(global_scene_encoding, dynamic_encoding_, episode_idx_)
+        att_scenes = att_scenes.reshape(batch_size, T, -1)
+
+        # Concat the dynamic and static encodings
+        dynamic_static = torch.cat((dynamic_encoding, static, att_scenes), dim=-1) # B X T X 200
+
+        # 2-layer MLP
+        output = self.mlp(dynamic_static) # B X T X 6
+        mu_hat = output[:, :, :2] # [B X T X 2]
+        sigma_hat = output[:, :, 2:].reshape((batch_size, T, 2, 2)) # [B X T X 2 X 2]
+
+        # verlet integration
+        mu = x_prev + self.velocity_const * dx + mu_hat
+
+        # Calculate the matrix exponential
+        # sigma_sym = sigma_hat + sigma_hat.transpose(-2, -1) # Make a symmetric
+
+        # "Batched symeig and qr are very slow on GPU"
+        # https://github.com/pytorch/pytorch/issues/22573
+        # device = sigma_sym.device # Detect the sigma tensor device
+        # sigma_sym = sigma_sym.cpu() # eig decomposition is faster in CPU
+        # e, v = torch.symeig(sigma_sym, eigenvectors=True)
+
+        # # Convert back to gpu tensors
+        # e = e.to(device) # B X T X 2
+        # v = v.to(device) # B X T X 2 X 2
+
+        # vt = v.transpose(-2, -1)
+        # sigma = torch.matmul(v * torch.exp(e).unsqueeze(-2), vt) # B X T X 2 X 2
+
+        # New matrix Exponential
+        # sigma_sym = [[a, b], [b, d]]
+        b = sigma_hat[:, :, 0, 1] + sigma_hat[:, :, 1, 0]
+        apd_2 = sigma_hat[:, :, 0, 0] + sigma_hat[:, :, 1, 1] # (a+d) / 2
+        amd_2 = sigma_hat[:, :, 0, 0] - sigma_hat[:, :, 1, 1] # (a-d) / 2
+        delta = torch.sqrt(amd_2 ** 2 + b ** 2)
+        sinh = torch.sinh(delta)
+        cosh = torch.cosh(delta)
+
+        sigma = torch.zeros_like(sigma_hat)
+
+        tmp1 = sinh / delta
+        tmp2 = amd_2 / tmp1
+
+        sigma[:, :, 0, 0] = cosh + tmp2
+        sigma[:, :, 0, 1] = b * tmp1
+        sigma[:, :, 1, 0] = sigma[:, :, 0, 1]
+        sigma[:, :, 1, 1] = cosh - tmp2
+        sigma *= torch.exp(apd_2).unsqueeze(-1).unsqueeze(-1)
+
+        # solve  Z = inv(sigma) * (X-mu)
+        X_mu = (x - mu).unsqueeze(-1) # B X T X 2 X 1
+        z, _ = X_mu.solve(sigma) # B X T X 2 X 1
+        z = z.squeeze(-1) # B X T X 2
+
+        return z, mu, sigma
+
+    def forward(self, z, x_flat, h, static, dx, x_prev, global_scene_encoding, episode_idx):
+        '''
+        input shape
+        z: A X 2
+        x_flat: A X 60
+        h: 1 X A X 150
+        static: A X 50
+        dx: A X 2
+        x_prev: A X 2
+
+        ouput shape
+        x : A X 2
+        mu: A X 2
+        sigma: A X 2 X 2
+        '''
+
+        # Detect dynamic batch size
+        batch_size = static.size(0)
+
+        # Unroll a step
+        dynamic_encoding, h = self.gru(x_flat.unsqueeze(0), h)
+        dynamic_encoding = dynamic_encoding[-1] # Need the last one
+
+        att_scene, alpha = self.crossmodal_attention(global_scene_encoding, dynamic_encoding, episode_idx)
+
+        # Concat the dynamic and static encodings
+        dynamic_static = torch.cat((dynamic_encoding, static, att_scene), dim=-1) # B X 200
+
+        # 2-layer MLP
+        output = self.mlp(dynamic_static)# B X 6
+        mu_hat = output[:, :2] # B X 2
+        sigma_hat = output[:, 2:].reshape((batch_size, 2, 2)) # B X 2 X 2
+
+        # verlet integration
+        mu = x_prev + self.velocity_const * dx + mu_hat
+
+        # # matrix exponential
+        # sigma_sym = sigma_hat + sigma_hat.transpose(-2, -1) # Make a symmetric
+
+        # # "Batched symeig and qr are very slow on GPU"
+        # # https://github.com/pytorch/pytorch/issues/22573
+        # device = sigma_sym.device # Detect device before conversion
+        # sigma_sym = sigma_sym.cpu() # Eigen decomposition is faster in CPU
+        # e, v = torch.symeig(sigma_sym, eigenvectors=True)
+
+        # # Convert back to gpu tensors
+        # e = e.to(device)
+        # v = v.to(device)
+
+        # vt = v.transpose(-2, -1)
+        # sigma = torch.matmul(v * torch.exp(e).unsqueeze(-2), vt) # B X 2 X 2
+
         # New matrix Exponential
         # sigma_sym = [[a, b], [b, d]]
         b = sigma_hat[:, 0, 1] + sigma_hat[:, 1, 0]
