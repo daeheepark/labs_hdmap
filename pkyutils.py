@@ -18,6 +18,7 @@ import pickle
 
 from nuscenes import NuScenes
 from nuscenes.map_expansion.map_api import NuScenesMap
+from nuscenes.eval.prediction.splits import get_prediction_challenge_split
 
 from rasterization_q10.input_representation.static_layers import StaticLayerRasterizer
 from rasterization_q10.input_representation.agents import AgentBoxesWithFadedHistory
@@ -55,7 +56,7 @@ class NusCustomParser(Dataset):
     def __init__(self, root='/datasets/nuscene/v1.0-mini', sampling_time=3, agent_time=0, layer_names=None,
                  colors=None, resolution: float = 0.1,  # meters / pixel
                  meters_ahead: float = 25, meters_behind: float = 25,
-                 meters_left: float = 25, meters_right: float = 25, version='v1.0-mini'):
+                 meters_left: float = 25, meters_right: float = 25, version='v1.0-mini', split='train'):
         if layer_names is None:
             layer_names = ['drivable_area', 'road_segment', 'road_block',
                            'lane', 'ped_crossing', 'walkway', 'stop_line',
@@ -66,8 +67,9 @@ class NusCustomParser(Dataset):
                       (255, 255, 255), (255, 255, 255), (255, 255, 255), ]
         self.root = root
         self.nus = NuScenes(version, dataroot=self.root)
-        self.scenes = self.nus.scene
-        self.samples = self.nus.sample
+        # self.scenes = self.nus.scene
+        # self.samples = self.nus.sample
+        self.dataset = get_prediction_challenge_split(split, dataroot=self.root)
 
         self.layer_names = layer_names
         self.colors = colors
@@ -88,16 +90,19 @@ class NusCustomParser(Dataset):
         self.show_agent = True
 
     def __len__(self):
-        return len(self.samples)
+        return len(self.dataset)
 
     def __getitem__(self, idx):
         scene_id = idx
-        sample = self.samples[idx]
-        sample_token = sample['token']
+        # sample = self.samples[idx]
+        # sample_token = sample['token']
+        instance_token, sample_token = self.dataset[idx].split('_')
 
         # 1. calculate ego pose
-        sample_data_lidar = self.nus.get('sample_data', sample['data']['LIDAR_TOP'])
-        ego_pose = self.nus.get('ego_pose', sample_data_lidar['ego_pose_token'])
+        # sample_data_lidar = self.nus.get('sample_data', sample['data']['LIDAR_TOP'])
+        # ego_pose = self.nus.get('ego_pose', sample_data_lidar['ego_pose_token'])
+        ego_pose = self.helper.get_sample_annotation(instance_token, sample_token)
+
         ego_pose_xy = ego_pose['translation']
         ego_pose_rotation = ego_pose['rotation']
 
@@ -125,33 +130,8 @@ class NusCustomParser(Dataset):
         else:
             xy_local.append(convert_global_coords_to_local(xy_global[2], ego_pose_xy, ego_pose_rotation))
 
-        # # 4. Generate Virtual Agent Trajectory
-        # lane_tokens = list(lanes.keys())
-        # lanes_disc = [np.array(lanes[token])[:, :2] for token in lane_tokens]
 
-        # virtual_mask, virtual_xy = self.agent_layer.generate_virtual_mask(
-        #     ego_pose_xy, ego_pose_rotation, lanes_disc, sample_token, show_agent=self.show_agent,
-        #     past_trj_len=4, future_trj_len=6, min_dist=6)
-
-        virtual_xy_local = []
-        virtual_mask = None
-
-        # # past, future trajectory
-        # for path_global in virtual_xy[:2]:
-        #     pose_xy = []
-        #     for path_global_i in path_global:
-        #         if len(path_global_i) == 0:
-        #             pose_xy.append(path_global_i)
-        #         else:
-        #             pose_xy.append(convert_global_coords_to_local(path_global_i, ego_pose_xy, ego_pose_rotation))
-        #     virtual_xy_local.append(pose_xy)
-        # # current pose
-        # if len(virtual_xy[2]) == 0:
-        #     virtual_xy_local.append(virtual_xy[2])
-        # else:
-        #     virtual_xy_local.append(convert_global_coords_to_local(virtual_xy[2], ego_pose_xy, ego_pose_rotation))
-
-        return map_masks, map_img, agent_mask, xy_local, virtual_mask, virtual_xy_local, scene_id
+        return map_masks, map_img, agent_mask, xy_local, scene_id
 
     def render_sample(self, idx):
         sample = self.samples[idx]
@@ -214,13 +194,14 @@ class NusCustomParser(Dataset):
 
 
 class NusToolkit(torch.utils.data.dataset.Dataset):
-    def __init__(self, root='/datasets/nuscene/v1.0-mini', version='v1.0-mini', load_dir='../nus_dataset'):
+    def __init__(self, root='/datasets/nuscene/v1.0-mini', version='v1.0-mini', load_dir='../nus_dataset', split='val'):
         self.DATAROOT = root
         self.version = version
         self.sampling_time = 3
         self.agent_time = 0  # zero for static mask, non-zero for overlap
         self.layer_names = ['drivable_area', 'lane']
         self.colors = [(255, 255, 255), (255, 255, 100)]
+        self.split = split
         self.dataset = NusCustomParser(
             root=self.DATAROOT,
             version=self.version,
@@ -232,7 +213,8 @@ class NusToolkit(torch.utils.data.dataset.Dataset):
             meters_ahead=32,
             meters_behind=32,
             meters_left=32,
-            meters_right=32)
+            meters_right=32,
+            split=self.split)
         print("num_samples: {}".format(len(self.dataset)))
 
         self.p_transform = transforms.Compose([
@@ -287,7 +269,7 @@ class NusToolkit(torch.utils.data.dataset.Dataset):
         return image, prior
 
     def save_dataset(self):
-        data_dir = self.data_dir
+        data_dir = self.data_dir + '_' + self.split
         map_dir = os.path.join(data_dir, 'map')
         prior_dir = os.path.join(data_dir, 'prior')
         # fake_dir = os.path.join(data_dir, 'fake')
@@ -301,7 +283,7 @@ class NusToolkit(torch.utils.data.dataset.Dataset):
             os.makedirs(real_dir)
 
             for idx in tqdm(range(len(self.dataset))):
-                map_masks, map_img, agent_mask, xy_local, virtual_mask, virtual_xy_local, idx = self.dataset[idx]
+                map_masks, map_img, agent_mask, xy_local, idx = self.dataset[idx]
 
                 agent_past, agent_future, agent_translation = xy_local
                 # fake_past, fake_future, fake_translation = virtual_xy_local
