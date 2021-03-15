@@ -5,7 +5,7 @@
 # --num_candidates=6 --map_version '2.0' 
 
 CUDA_VISIBLE_DEVICES=0 python main_pky.py \
---tag='0309_AttTest' --model_type='AttGlobal_Scene_CAM_NFDecoder' \
+--tag='0315_trainvalsplit_test' --model_type='AttGlobal_Scene_CAM_NFDecoder' \
 --version='v1.0-trainval' \
 --load_dir='../../jegyeong/datasets/nus_dataset' \
 --batch_size=8 --num_epochs=100 --gpu_devices=0 --agent_embed_dim=128 \

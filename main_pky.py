@@ -71,11 +71,11 @@ def train(args):
     max_angle = args.max_angle
     print('min angle:', str(min_angle), ', max angle:', str(max_angle))
 
-    train_dataset = DatasetQ10(version=version, load_dir=load_dir, data_partition='train',
+    train_dataset = DatasetQ10(version=version, load_dir=load_dir, split='train',
                                shuffle=True, val_ratio=0.3, data_type=data_type, min_angle=min_angle,
                                max_angle=max_angle)
 
-    val_dataset = DatasetQ10(version=version, load_dir=load_dir, data_partition='val',
+    val_dataset = DatasetQ10(version=version, load_dir=load_dir, split='train_val',
                              shuffle=False, val_ratio=0.3, data_type='real', min_angle=min_angle,
                              max_angle=max_angle)
 
@@ -641,54 +641,18 @@ if __name__ == "__main__":
     parser.add_argument('--load_dir', type=str, default='../datasets/nus_dataset')
     parser.add_argument('--viz', action='store_true')
 
-<<<<<<< HEAD
-    # args = parser.parse_args()
-    args = parser.parse_args('--version v1.0-test --data_type real \
---ploss_type map \
---beta 0.1 --batch_size 1 \
---test_times 1 \
---test_ckpt experiment/0309_AttTest__09_March__01_21_/ck_91_-12.0503_57.8873_0.7136_1.5714.pth.tar \
---test_dir results \
---load_dir ../nus_dataset --viz'.split(' '))
-=======
-    parser.add_argument('--posthoc', action='store_true')
-    parser.add_argument('--posthoc_tune', default=None, help="Post-hoc tunning for dsf network")
-    parser.add_argument('--post_epochs', type=int, default=None, help='Training iteration of post-hoc tunning')
-
-    parser.add_argument('--gamma', type=float, default=0.5)
-    parser.add_argument('--lamb', type=float, default=0.5)
-
-    # args = parser.parse_args()
-    lamb = 10.0  # diversity loss
-    gamma = 10.0  # map loss
-
-    beta = 1.0
-    # test_path = 'experiment/beta_1.0_gamma_10.0_lamb_0.1_clamp_32_mse_map__04_February__04_01_/epoch30.pth.tar'
-    test_path = 'experiment/None_None_real_AttGlobal_Scene_CAM_NFDecoder__03_January__03_55_/epoch100.pth.tar'
-
-    pretrained_path = 'experiment/None_None_real_AttGlobal_Scene_CAM_NFDecoder__03_January__03_55_/epoch100.pth.tar'
-
-#     args = parser.parse_args('--tag beta_{}_gamma_{}_lamb_{}_clamp_32_mse_map --model_type Global_Scene_CAM_DSF_NFDecoder \
-# --batch_size 128 --num_epochs 30 --agent_embed_dim 128 \
-# --num_candidates 6 --test_ckpt {} --test_partition val --test_dir ./test \
-# --posthoc_tune {} --ploss_type all \
-# --post_epochs 30 --learning_rate 1e-3 --test_times 1 --beta {} \
-# --version v1.0-trainval --data_type real --min_angle 0.001745 \
-# --posthoc --gamma {} --lamb {}'.format(beta, gamma, lamb, test_path, pretrained_path, beta, gamma, lamb).split(' '))
-
-#     args = parser.parse_args('--version v1.0-mini --data_type real --ploss_type mseloss \
-# --beta 0.1 --batch_size 1 --test_ckpt {} --test_dir test_results --min_angle 0.001745 --viz'.format(test_path).split(' '))
-
-# 0.1도: 0.001745, 5도: 0.0872665, 10도: 0.174533
-    args = parser.parse_args('--version v1.0-trainval --data_type real --ploss_type mseloss --min_angle 0.001745 \
---beta 0.1 --batch_size 3 --test_ckpt {} --test_times 1 --test_dir test_results'.format(test_path).split(' '))
->>>>>>> b7b2ff74551be9354718a87bf0f7461d17759307
+    args = parser.parse_args()
+#     args = parser.parse_args('--version v1.0-test --data_type real \
+# --ploss_type map \
+# --beta 0.1 --batch_size 1 \
+# --test_times 1 \
+# --test_ckpt experiment/0309_AttTest__09_March__01_21_/ck_91_-12.0503_57.8873_0.7136_1.5714.pth.tar \
+# --test_dir results \
+# --load_dir ../nus_dataset --viz'.split(' '))
 
     # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_devices
 
-    if args.posthoc:
-        posthoc(args)
-    elif args.viz:
+    if args.viz:
         visualize(args)
     elif args.test_ckpt is not None:
         test(args)

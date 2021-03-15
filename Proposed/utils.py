@@ -847,17 +847,14 @@ class ModelTest:
         list_dao = []
         list_dac = []
 
-<<<<<<< HEAD
         list_sd =[]
         list_angle = []
-=======
         minFSD3 = []
         maxFSD3 = []
         stdFD3 = []
         voAngles = []
         minFSD3_n = []
         maxFSD3_n = []
->>>>>>> b7b2ff74551be9354718a87bf0f7461d17759307
 
         for test_time in range(self.test_times):
 
@@ -1292,26 +1289,6 @@ class ModelTest:
         test_ades = (test_minade2, test_avgade2, test_minade3, test_avgade3)
         test_fdes = (test_minfde2, test_avgfde2, test_minfde3, test_avgfde3)
 
-<<<<<<< HEAD
-        test_sd = [np.mean(list_sd), np.std(list_sd)]
-        test_angle = [np.mean(list_angle), np.std(list_angle)]
-
-        print("--Final Performane Report--")
-        print("minADE3: {:.5f}±{:.5f}, minFDE3: {:.5f}±{:.5f}".format(test_minade3[0], test_minade3[1], test_minfde3[0], test_minfde3[1]))
-        print("avgADE3: {:.5f}±{:.5f}, avgFDE3: {:.5f}±{:.5f}".format(test_avgade3[0], test_avgade3[1], test_avgfde3[0], test_avgfde3[1]))
-        print("DAO: {:.5f}±{:.5f}, DAC: {:.5f}±{:.5f}".format(test_dao[0] * 10000.0, test_dao[1] * 10000.0, test_dac[0], test_dac[1]))
-        print("SD: {:.5f}±{:.5f}".format(test_sd[0], test_sd[1]))
-        print("Angle: {:.5f}±{:.5f}".format(test_angle[0]*180/np.pi, test_angle[1]*180/np.pi))
-        with open(self.out_dir + '/metric.pkl', 'wb') as f:
-            pkl.dump({"ADEs": test_ades,
-                      "FDEs": test_fdes,
-                      "Qloss": test_qloss,
-                      "Ploss": test_ploss, 
-                      "DAO": test_dao,
-                      "DAC": test_dac,
-                      "SD": test_sd,
-                      "Angle": test_angle}, f)
-=======
         print("--Final Performance Report--")
         print("minADE3: {:.5f}±{:.5f}, minFDE3: {:.5f}±{:.5f}".format(test_minade3[0], test_minade3[1], test_minfde3[0],
                                                                       test_minfde3[1]))
@@ -1365,7 +1342,6 @@ class ModelTest:
                 test_ades, test_fdes, test_qloss, test_ploss, test_dao, test_dac))
             # pkl.dump('ADEs: {} \n FDEs: {} \n Qloss: {} \n Ploss: {}'.format(
             #     test_ades, test_fdes, test_qloss, test_ploss), f)
->>>>>>> b7b2ff74551be9354718a87bf0f7461d17759307
 
     @staticmethod
     def q10testsingle(model, batch, device):

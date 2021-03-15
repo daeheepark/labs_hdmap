@@ -366,22 +366,21 @@ class NusToolkit(torch.utils.data.dataset.Dataset):
 
 
 class DatasetQ10(torch.utils.data.dataset.Dataset):
-    def __init__(self, version='v1.0-mini', load_dir='../nus_dataset', data_partition='train',
+    def __init__(self, version='v1.0-mini', load_dir='../nus_dataset', split='train',
                  shuffle=False, val_ratio=0.3, data_type='real', min_angle=None, max_angle=None):
 
-        self.data_dir = os.path.join(load_dir, version)
+        self.data_dir = os.path.join(load_dir, version+'_'+split)
         self.data_type = data_type
-        self.data_partition = data_partition
 
         n = len(os.listdir(os.path.join(self.data_dir, 'map')))
         
         self.ids = np.arange(n)
-        if data_partition == 'train':
-            self.ids = self.ids[: int(n * (1 - val_ratio))]
-        elif data_partition == 'val':
-            self.ids = self.ids[: int(n * val_ratio)]
-        elif data_partition == 'all':
-            pass
+        # if data_partition == 'train':
+        #     self.ids = self.ids[: int(n * (1 - val_ratio))]
+        # elif data_partition == 'val':
+        #     self.ids = self.ids[: int(n * val_ratio)]
+        # elif data_partition == 'all':
+        #     pass
 
         if shuffle:
             np.random.shuffle(self.ids)
@@ -436,8 +435,8 @@ class DatasetQ10(torch.utils.data.dataset.Dataset):
             data = (past, past_len, future[agent_mask], future_len[agent_mask], agent_mask,
                     vel, pos, map_img, prior, sample_idx)
 
-            if 'test' in self.data_partition:
-                data = (data[0], data[1], data[4], data[5], data[6], data[7], data[8], data[9])
+            # if 'test' in self.data_partition:
+            #     data = (data[0], data[1], data[4], data[5], data[6], data[7], data[8], data[9])
 
             return data
 
