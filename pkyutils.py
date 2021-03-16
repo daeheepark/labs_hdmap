@@ -473,10 +473,10 @@ class DatasetQ10(torch.utils.data.dataset.Dataset):
 
         plt.figure(figsize=(10, 5))
         plt.title('Distribution')
-        plt.hist(self.distances, bins=90, color='royalblue', range=(0, 20))
+        plt.hist(self.distances, bins=90, color='royalblue', range=(0.5, 20))
         plt.xlabel('Future Path Length (m)')
         plt.ylabel('count')
-        plt.xlim([0, 20])
+        plt.xlim([0.5, 20])
         plt.show()
 
         return self.distances
