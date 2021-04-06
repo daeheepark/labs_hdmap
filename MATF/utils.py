@@ -26,7 +26,8 @@ class ModelTrainer:
 
     def __init__(self, model, train_loader, valid_loader, optimizer, exp_path, args, device):
 
-        self.exp_path = os.path.join(exp_path, args.tag + '_' + datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=-4))).strftime('_%d_%B__%H_%M_'))
+        self.exp_path = os.path.join(exp_path, args.tag + '_' + datetime.datetime.now(
+            datetime.timezone(datetime.timedelta(hours=-4))).strftime('_%d_%B__%H_%M_'))
         if not os.path.exists(self.exp_path):
             os.mkdir(self.exp_path)
 
@@ -56,9 +57,9 @@ class ModelTrainer:
             self.map_version = args.map_version
         else:
             self.map_version = ''
-        
-        self.optimizer = optimizer    
-        self.scheduler = ReduceLROnPlateau(self.optimizer, factor=(1/2), verbose=True, patience=3)
+
+        self.optimizer = optimizer
+        self.scheduler = ReduceLROnPlateau(self.optimizer, factor=(1 / 2), verbose=True, patience=3)
 
         if args.load_ckpt is not None:
             self.load_checkpoint(args.load_ckpt)
@@ -68,13 +69,13 @@ class ModelTrainer:
         self.best_valid_fde = 1e9
         self.start_epoch = args.start_epoch
 
-
     def train(self, num_epochs):
-        self.logger.info('Model Type: '+str(self.model_type))
+        self.logger.info('Model Type: ' + str(self.model_type))
         self.logger.info('TRAINING .....')
 
         for epoch in tqdm(range(self.start_epoch, self.start_epoch + num_epochs)):
-            self.logger.info("==========================================================================================")
+            self.logger.info(
+                "==========================================================================================")
 
             train_loss, train_ades, train_fdes = self.train_single_epoch()
             valid_ades, valid_fdes, scheduler_metric = self.inference()
@@ -97,13 +98,14 @@ class ModelTrainer:
             )
 
             logging_msg2 = (
-                f'| Epoch: {epoch:02} | ' #Valid Loss: {valid_loss:0.6f} '
+                f'| Epoch: {epoch:02} | '  # Valid Loss: {valid_loss:0.6f} '
                 f'| Valid minADE[2/3]: {valid_minade2:0.4f} / {valid_minade3:0.4f} | Valid minFDE[2/3]: {valid_minfde2:0.4f} /{valid_minfde3:0.4f} '
                 f'| Valid avgADE[2/3]: {valid_avgade2:0.4f} / {valid_avgade3:0.4f} | Valid avgFDE[2/3]: {valid_avgfde2:0.4f} /{valid_avgfde3:0.4f} '
                 f'| Scheduler Metric: {scheduler_metric:0.4f} | Learning Rate: {self.get_lr():g}\n'
             )
 
-            self.logger.info("------------------------------------------------------------------------------------------")
+            self.logger.info(
+                "------------------------------------------------------------------------------------------")
             self.logger.info(logging_msg1)
             self.logger.info(logging_msg2)
 
@@ -140,7 +142,6 @@ class ModelTrainer:
         self.logger.info("Training Complete! ")
         self.logger.info(f'| Best Valid ADE: {self.best_valid_ade} | Best Valid FDE: {self.best_valid_fde} |')
 
-
     def train_single_epoch(self):
         """Trains the model for a single round."""
 
@@ -151,7 +152,7 @@ class ModelTrainer:
         epoch_minfde2, epoch_avgfde2 = 0.0, 0.0
         epoch_minade3, epoch_avgade3 = 0.0, 0.0
         epoch_minfde3, epoch_avgfde3 = 0.0, 0.0
-    
+
         epoch_agents, epoch_agents2, epoch_agents3 = 0.0, 0.0, 0.0
 
         H = W = 60
@@ -165,30 +166,33 @@ class ModelTrainer:
                 coordinate_std, coordinate_mean = torch.std_mean(coordinate)
                 coordinate = (coordinate - coordinate_mean) / coordinate_std
 
-                distance_2d = coordinate_2d - np.array([(H-1)/2, (H-1)/2]).reshape((2, 1, 1))
+                distance_2d = coordinate_2d - np.array([(H - 1) / 2, (H - 1) / 2]).reshape((2, 1, 1))
                 distance = np.sqrt((distance_2d ** 2).sum(axis=0))
                 distance = torch.FloatTensor(distance)
                 distance = distance.reshape((1, 1, H, W))
 
                 distance_std, distance_mean = torch.std_mean(distance)
                 distance = (distance - distance_mean) / distance_std
-            
+
             coordinate = coordinate.to(self.device)
             distance = distance.to(self.device)
 
         for b, batch in enumerate(self.train_loader):
 
-            print("Working on batch {:d}/{:d}".format(b+1, len(self.train_loader)), end='\r')
+            print("Working on batch {:d}/{:d}".format(b + 1, len(self.train_loader)), end='\r')
 
             self.optimizer.zero_grad()
 
             scene_images, log_prior, \
             future_agent_masks, \
-            num_past_agents,   past_agents_traj,   past_agents_traj_len,   past_agents_traj_len_idx, \
+            num_past_agents, past_agents_traj, past_agents_traj_len, past_agents_traj_len_idx, \
             num_future_agents, future_agents_traj, future_agents_traj_len, future_agents_traj_len_idx, \
             two_mask, three_mask, \
             decode_start_vel, decode_start_pos, \
             scene_id = batch
+
+            scene_images = scene_images[:, :, 2:-2, 2:-2]
+            log_prior = log_prior[:, 2:-2, 2:-2]
 
             # Detect dynamic batch size
             batch_size = scene_images.size(0)
@@ -216,23 +220,23 @@ class ModelTrainer:
             num_future_agents = num_future_agents.to(self.device)
             decode_start_vel = decode_start_vel.to(self.device)
             decode_start_pos = decode_start_pos.to(self.device)
-            
+
             episode_idx = torch.arange(len(num_past_agents), device=self.device).repeat_interleave(num_past_agents)
 
             # Inference
             if 'SimpleEncDec' == self.model_type:
                 predicted_trajs = self.model(past_agents_traj, past_agents_traj_len, future_agent_masks,
-                                            decode_start_vel, decode_start_pos)
+                                             decode_start_vel, decode_start_pos)
 
             elif 'SocialPooling' == self.model_type:
                 predicted_trajs = self.model(past_agents_traj, past_agents_traj_len, episode_idx, future_agent_masks,
-                                            decode_start_vel, decode_start_pos)             
+                                             decode_start_vel, decode_start_pos)
 
             elif 'MATF' in self.model_type:
-                stochastic = False                
+                stochastic = False
                 predicted_trajs = self.model(past_agents_traj, past_agents_traj_len, episode_idx, future_agent_masks,
-                                            decode_start_vel, decode_start_pos, 
-                                            scene_images, stochastic)
+                                             decode_start_vel, decode_start_pos,
+                                             scene_images, stochastic)
 
             else:
                 raise ValueError("Unknown model type {:s}.".format(self.model_type))
@@ -240,37 +244,37 @@ class ModelTrainer:
             agent_time_index = torch.arange(num_agents, device=self.device).repeat_interleave(future_agents_traj_len)
             time_normalizer = future_agents_traj_len.float().repeat_interleave(future_agents_traj_len)
 
-            error = future_agents_traj - predicted_trajs # A x Td x 2
-            batch_loss = (error ** 2).sum(dim=-1) # x**2 + y**2 | A x Td 
+            error = future_agents_traj - predicted_trajs  # A x Td x 2
+            batch_loss = (error ** 2).sum(dim=-1)  # x**2 + y**2 | A x Td
             batch_loss = batch_loss[agent_time_index, future_agents_traj_len_idx] / time_normalizer
             batch_loss = batch_loss.sum() / (num_agents * 2.0)
 
             with torch.no_grad():
 
                 # Two-Errors
-                sq_error2 = (error[two_mask, :int(self.decoding_steps*2/3), :] ** 2).sum(2).sqrt() # A X Td X 2 >> A X Td
+                sq_error2 = (error[two_mask, :int(self.decoding_steps * 2 / 3), :] ** 2).sum(
+                    2).sqrt()  # A X Td X 2 >> A X Td
                 sq_error3 = (error[three_mask, :, :] ** 2).sum(2).sqrt()
 
                 num_agents2 = sq_error2.size(0)
                 num_agents3 = sq_error3.size(0)
 
-                ade2 = sq_error2.mean(dim=-1) # A X T >> A
-                fde2 = sq_error2[... , -1]
+                ade2 = sq_error2.mean(dim=-1)  # A X T >> A
+                fde2 = sq_error2[..., -1]
                 ade3 = sq_error3.mean(dim=-1)
-                fde3 = sq_error3[... , -1]
-                
+                fde3 = sq_error3[..., -1]
+
                 # 2-Loss
-                batch_minade2 = ade2.mean() # A >> 1
+                batch_minade2 = ade2.mean()  # A >> 1
                 batch_minfde2 = fde2.mean()
                 batch_avgade2 = ade2.mean()
                 batch_avgfde2 = fde2.mean()
-                
+
                 # 3-Loss
                 batch_minade3 = ade3.mean()
                 batch_minfde3 = fde3.mean()
                 batch_avgade3 = ade3.mean()
                 batch_avgfde3 = fde3.mean()
-
 
             # Loss backward
             batch_loss.backward()
@@ -292,7 +296,6 @@ class ModelTrainer:
             epoch_agents2 += num_agents2
             epoch_agents3 += num_agents3
 
-
         epoch_loss /= epoch_agents
 
         # 2-Loss
@@ -307,22 +310,21 @@ class ModelTrainer:
         epoch_minfde3 /= epoch_agents3
         epoch_avgfde3 /= epoch_agents3
 
-        epoch_ades = ( epoch_minade2, epoch_avgade2, epoch_minade3, epoch_avgade3 )
-        epoch_fdes = ( epoch_minfde2, epoch_avgfde2, epoch_minfde3, epoch_avgfde3 )
+        epoch_ades = (epoch_minade2, epoch_avgade2, epoch_minade3, epoch_avgade3)
+        epoch_fdes = (epoch_minfde2, epoch_avgfde2, epoch_minfde3, epoch_avgfde3)
 
         return epoch_loss, epoch_ades, epoch_fdes
 
-
     def inference(self):
         self.model.eval()  # Set model to evaluate mode.
-        
+
         with torch.no_grad():
             epoch_loss = 0.0
             epoch_minade2, epoch_avgade2 = 0.0, 0.0
             epoch_minfde2, epoch_avgfde2 = 0.0, 0.0
             epoch_minade3, epoch_avgade3 = 0.0, 0.0
             epoch_minfde3, epoch_avgfde3 = 0.0, 0.0
-        
+
             epoch_agents, epoch_agents2, epoch_agents3 = 0.0, 0.0, 0.0
 
             H = W = 60
@@ -335,29 +337,31 @@ class ModelTrainer:
                 coordinate_std, coordinate_mean = torch.std_mean(coordinate)
                 coordinate = (coordinate - coordinate_mean) / coordinate_std
 
-                distance_2d = coordinate_2d - np.array([H/2 - 0.5, W/2 - 0.5]).reshape((2, 1, 1))
+                distance_2d = coordinate_2d - np.array([H / 2 - 0.5, W / 2 - 0.5]).reshape((2, 1, 1))
                 distance = np.sqrt((distance_2d ** 2).sum(axis=0))
                 distance = torch.FloatTensor(distance)
                 distance = distance.reshape((1, 1, H, W))
 
                 distance_std, distance_mean = torch.std_mean(distance)
                 distance = (distance - distance_mean) / distance_std
-                
+
                 coordinate = coordinate.to(self.device)
                 distance = distance.to(self.device)
 
             for b, batch in enumerate(self.valid_loader):
 
-                print("Working on batch {:d}/{:d}".format(b+1, len(self.valid_loader)), end='\r')
+                print("Working on batch {:d}/{:d}".format(b + 1, len(self.valid_loader)), end='\r')
 
                 scene_images, log_prior, \
                 future_agent_masks, \
-                num_past_agents,   past_agents_traj,   past_agents_traj_len,   past_agents_traj_len_idx, \
+                num_past_agents, past_agents_traj, past_agents_traj_len, past_agents_traj_len_idx, \
                 num_future_agents, future_agents_traj, future_agents_traj_len, future_agents_traj_len_idx, \
                 two_mask, three_mask, \
                 decode_start_vel, decode_start_pos, \
                 scene_id = batch
-                
+
+                scene_images = scene_images[:, :, 2:-2, 2:-2]
+
                 # Detect dynamic batch size
                 batch_size = scene_images.size(0)
                 num_agents = future_agents_traj.size(0)
@@ -385,52 +389,55 @@ class ModelTrainer:
                 num_future_agents = num_future_agents.to(self.device)
                 decode_start_vel = decode_start_vel.to(self.device)
                 decode_start_pos = decode_start_pos.to(self.device)
-                
+
                 episode_idx = torch.arange(len(num_past_agents), device=self.device).repeat_interleave(num_past_agents)
 
                 # Inference
                 if 'SimpleEncDec' == self.model_type:
                     predicted_trajs = self.model(past_agents_traj, past_agents_traj_len, future_agent_masks,
-                                                decode_start_vel, decode_start_pos)
+                                                 decode_start_vel, decode_start_pos)
 
                 elif 'SocialPooling' == self.model_type:
-                    predicted_trajs = self.model(past_agents_traj, past_agents_traj_len, episode_idx, future_agent_masks,
-                                                decode_start_vel, decode_start_pos)
+                    predicted_trajs = self.model(past_agents_traj, past_agents_traj_len, episode_idx,
+                                                 future_agent_masks,
+                                                 decode_start_vel, decode_start_pos)
 
                 elif 'MATF' in self.model_type:
                     stochastic = False
-                    predicted_trajs = self.model(past_agents_traj, past_agents_traj_len, episode_idx, future_agent_masks,
-                                                decode_start_vel, decode_start_pos, 
-                                                scene_images, stochastic)
+                    predicted_trajs = self.model(past_agents_traj, past_agents_traj_len, episode_idx,
+                                                 future_agent_masks,
+                                                 decode_start_vel, decode_start_pos,
+                                                 scene_images, stochastic)
 
                 else:
                     raise ValueError("Unknown model type {:s}.".format(self.model_type))
 
-                agent_time_index = torch.arange(num_agents, device=self.device).repeat_interleave(future_agents_traj_len)
+                agent_time_index = torch.arange(num_agents, device=self.device).repeat_interleave(
+                    future_agents_traj_len)
                 time_normalizer = future_agents_traj_len.float().repeat_interleave(future_agents_traj_len)
 
-                error = future_agents_traj - predicted_trajs # A x Td x 2
-                batch_loss = (error ** 2).sum(dim=-1) # x**2 + y**2 | A x Td 
+                error = future_agents_traj - predicted_trajs  # A x Td x 2
+                batch_loss = (error ** 2).sum(dim=-1)  # x**2 + y**2 | A x Td
                 batch_loss = batch_loss[agent_time_index, future_agents_traj_len_idx] / time_normalizer
                 batch_loss = batch_loss.sum() / (num_agents * 2.0)
 
-                sq_error2 = (error[two_mask, :int(self.decoding_steps*2/3), :] ** 2).sum(2).sqrt()
-                sq_error3 = (error[three_mask,:, :] ** 2).sum(2).sqrt()
+                sq_error2 = (error[two_mask, :int(self.decoding_steps * 2 / 3), :] ** 2).sum(2).sqrt()
+                sq_error3 = (error[three_mask, :, :] ** 2).sum(2).sqrt()
 
                 num_agents2 = sq_error2.size(0)
                 num_agents3 = sq_error3.size(0)
 
-                ade2 = sq_error2.mean(dim=-1) # A X T >> A
-                fde2 = sq_error2[... , -1]
+                ade2 = sq_error2.mean(dim=-1)  # A X T >> A
+                fde2 = sq_error2[..., -1]
                 ade3 = sq_error3.mean(dim=-1)
-                fde3 = sq_error3[... , -1]
-                
+                fde3 = sq_error3[..., -1]
+
                 # 2-Loss
-                batch_minade2 = ade2.mean() # A >> 1
+                batch_minade2 = ade2.mean()  # A >> 1
                 batch_minfde2 = fde2.mean()
                 batch_avgade2 = ade2.mean()
                 batch_avgfde2 = fde2.mean()
-                
+
                 # 3-Loss
                 batch_minade3 = ade3.mean()
                 batch_minfde3 = fde3.mean()
@@ -453,7 +460,6 @@ class ModelTrainer:
                 epoch_agents2 += num_agents2
                 epoch_agents3 += num_agents3
 
-
         epoch_minade2 /= epoch_agents2
         epoch_avgade2 /= epoch_agents2
         epoch_minfde2 /= epoch_agents2
@@ -464,13 +470,12 @@ class ModelTrainer:
         epoch_minfde3 /= epoch_agents3
         epoch_avgfde3 /= epoch_agents3
 
-        epoch_ades = ( epoch_minade2, epoch_avgade2, epoch_minade3, epoch_avgade3 )
-        epoch_fdes = ( epoch_minfde2, epoch_avgfde2, epoch_minfde3, epoch_avgfde3 )
+        epoch_ades = (epoch_minade2, epoch_avgade2, epoch_minade3, epoch_avgade3)
+        epoch_fdes = (epoch_minfde2, epoch_avgfde2, epoch_minfde3, epoch_avgfde3)
 
-        scheduler_metric = epoch_avgade3 + epoch_avgfde3 
+        scheduler_metric = epoch_avgade3 + epoch_avgfde3
 
         return epoch_ades, epoch_fdes, scheduler_metric
-
 
     def get_lr(self):
         """Returns Learning Rate of the Optimizer."""
@@ -512,10 +517,10 @@ class ModelTest:
 
         self.num_candidates = args.num_candidates
 
-        self.decoding_steps = int(3 *  args.sampling_rate)
+        self.decoding_steps = int(3 * args.sampling_rate)
 
         self.model_type = args.model_type
-        
+
         if self.model_type == 'MATF':
             self.map_version = args.map_version
         else:
@@ -526,28 +531,32 @@ class ModelTest:
         self.render = args.test_render
 
         self.test_times = args.test_times
-                
-        if args.dataset == "argoverse":
-            _data_dir = './data/argoverse'
-            self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3] ) + '.png' for x in scene_id]
 
-        elif args.dataset == "nuscenes":
-            _data_dir = './data/nuscenes'
-            self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3]) + '.pkl' for x in scene_id]
+        import hydra
+        # self.data_dir = os.path.join(args.load_dir, args.version)
+        self.data_dir = hydra.utils.to_absolute_path(args.load_dir)
+        self.map_file = lambda scene_ids: ['{}/{}/map.bin'.format(self.data_dir, scene_id) for scene_id in scene_ids]
 
-        elif args.dataset == "carla":
-            _data_dir = './data/carla'
-            self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3] ) + '.pkl' for x in scene_id]
+        # if args.dataset == "argoverse":
+        #     _data_dir = './data/argoverse'
+        #     self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3] ) + '.png' for x in scene_id]
+        #
+        # elif args.dataset == "nuscenes":
+        #     _data_dir = './data/nuscenes'
+        #     self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3]) + '.pkl' for x in scene_id]
+        #
+        # elif args.dataset == "carla":
+        #     _data_dir = './data/carla'
+        #     self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3] ) + '.pkl' for x in scene_id]
 
         self.load_checkpoint(args.test_ckpt)
-
 
     def load_checkpoint(self, ckpt):
         checkpoint = torch.load(ckpt)
         self.model.load_state_dict(checkpoint['model_state'], strict=False)
 
     def run(self):
-        print('Starting model test.....')    
+        print('Starting model test.....')
         self.model.eval()  # Set model to evaluate mode.
 
         list_minade2, list_avgade2 = [], []
@@ -558,12 +567,21 @@ class ModelTest:
         list_dao = []
         list_dac = []
 
+        minFSD3 = []
+        maxFSD3 = []
+        stdFD3 = []
+        voAngles = []
+        minFSD3_n = []
+        maxFSD3_n = []
+
+        miss_or_not = []
+
         for test_time in range(self.test_times):
             epoch_minade2, epoch_avgade2 = 0.0, 0.0
             epoch_minfde2, epoch_avgfde2 = 0.0, 0.0
             epoch_minade3, epoch_avgade3 = 0.0, 0.0
             epoch_minfde3, epoch_avgfde3 = 0.0, 0.0
-        
+
             epoch_agents, epoch_agents2, epoch_agents3 = 0.0, 0.0, 0.0
 
             epoch_dao = 0.0
@@ -582,14 +600,14 @@ class ModelTest:
                     coordinate_std, coordinate_mean = torch.std_mean(coordinate)
                     coordinate = (coordinate - coordinate_mean) / coordinate_std
 
-                    distance_2d = coordinate_2d - np.array([H/2 - 0.5, W/2 - 0.5]).reshape((2, 1, 1))
+                    distance_2d = coordinate_2d - np.array([H / 2 - 0.5, W / 2 - 0.5]).reshape((2, 1, 1))
                     distance = np.sqrt((distance_2d ** 2).sum(axis=0))
                     distance = torch.FloatTensor(distance)
                     distance = distance.reshape((1, 1, H, W))
 
                     distance_std, distance_mean = torch.std_mean(distance)
                     distance = (distance - distance_mean) / distance_std
-                    
+
                     coordinate = coordinate.to(self.device)
                     distance = distance.to(self.device)
 
@@ -597,12 +615,14 @@ class ModelTest:
 
                     scene_images, log_prior, \
                     future_agent_masks, \
-                    num_past_agents,   past_agents_traj,   past_agents_traj_len,   past_agents_traj_len_idx, \
+                    num_past_agents, past_agents_traj, past_agents_traj_len, past_agents_traj_len_idx, \
                     num_future_agents, future_agents_traj, future_agents_traj_len, future_agents_traj_len_idx, \
                     two_mask, three_mask, \
                     decode_start_vel, decode_start_pos, \
                     scene_id = batch
-                    
+
+                    scene_images = scene_images[:, :, 2:-2, 2:-2]
+
                     # Detect dynamic batch size
                     batch_size = scene_images.size(0)
                     num_agents = future_agents_traj.size(0)
@@ -610,11 +630,11 @@ class ModelTest:
                     if '2.' in self.map_version:
                         coordinate_batch = coordinate.expand(batch_size, -1, -1, -1)
                         distance_batch = distance.expand(batch_size, -1, -1, -1)
-                        scene_images = torch.cat((scene_images.to(self.device), coordinate_batch, distance_batch), dim=1)
+                        scene_images = torch.cat((scene_images.to(self.device), coordinate_batch, distance_batch),
+                                                 dim=1)
 
                     elif self.map_version == '1.3':
                         scene_images = scene_images.to(self.device)
-
 
                     # Upload to GPU
                     num_past_agents = num_past_agents.to(self.device)
@@ -632,56 +652,87 @@ class ModelTest:
                     decode_start_vel = decode_start_vel.to(self.device)
                     decode_start_pos = decode_start_pos.to(self.device)
 
-                    episode_idx = torch.arange(len(num_past_agents), device=self.device).repeat_interleave(num_past_agents)
+                    episode_idx = torch.arange(len(num_past_agents), device=self.device).repeat_interleave(
+                        num_past_agents)
 
                     # Inference
                     if 'SimpleEncDec' == self.model_type:
                         predicted_trajs = self.model(past_agents_traj, past_agents_traj_len, future_agent_masks,
-                                                    decode_start_vel, decode_start_pos)
+                                                     decode_start_vel, decode_start_pos)
 
                     elif 'SocialPooling' == self.model_type:
-                        predicted_trajs = self.model(past_agents_traj, past_agents_traj_len, episode_idx, future_agent_masks,
-                                                    decode_start_vel, decode_start_pos)
+                        predicted_trajs = self.model(past_agents_traj, past_agents_traj_len, episode_idx,
+                                                     future_agent_masks,
+                                                     decode_start_vel, decode_start_pos)
 
                     elif 'MATF' in self.model_type:
                         stochastic = False
-                        predicted_trajs = self.model(past_agents_traj, past_agents_traj_len, episode_idx, future_agent_masks,
-                                                    decode_start_vel, decode_start_pos,
-                                                    scene_images, stochastic)
+                        predicted_trajs = self.model(past_agents_traj, past_agents_traj_len, episode_idx,
+                                                     future_agent_masks,
+                                                     decode_start_vel, decode_start_pos,
+                                                     scene_images, stochastic)
                     else:
                         raise ValueError("Unknown model type {:s}.".format(self.model_type))
-                    
+
                     ## Deterministic model returns as: Na x Td x C
 
-                    agent_time_index = torch.arange(num_agents, device=self.device).repeat_interleave(future_agents_traj_len)
+                    agent_time_index = torch.arange(num_agents, device=self.device).repeat_interleave(
+                        future_agents_traj_len)
                     time_normalizer = future_agents_traj_len.float().repeat_interleave(future_agents_traj_len)
 
-                    error = future_agents_traj - predicted_trajs # A x Td x 2
+                    error = future_agents_traj - predicted_trajs  # A x Td x 2
 
-                    sq_error2 = (error[two_mask, :int(self.decoding_steps*2/3), :] ** 2).sum(2).sqrt()
-                    sq_error3 = (error[three_mask,:, :] ** 2).sum(2).sqrt()
+                    sq_error2 = (error[two_mask, :int(self.decoding_steps * 2 / 3), :] ** 2).sum(2).sqrt()
+                    sq_error3 = (error[three_mask, :, :] ** 2).sum(2).sqrt()
+
+                    # Miss Rate
+                    rs_error3 = (error[three_mask, :, :] ** 2).sum(2).sqrt()  # [agents_num, 6]
+                    rs_error3_max = rs_error3.max(dim=-1).values  # [agents_num]
+                    for error3_max in rs_error3_max:
+                        miss_or_not.append(torch.min(error3_max >= 2.))  # True or False (miss: true)
+
+                    for agent_idx, paths in enumerate(predicted_trajs):
+                        vo_angles = torch.FloatTensor([0.])
+                        fsds = torch.FloatTensor([0., 0.])
+                        min_fsd = torch.min(fsds)
+                        max_fsd = torch.max(fsds)
+                        std_fd = torch.std(fsds)
+                        vo_angle_mean = torch.mean(vo_angles)
+
+                        fsds_n = torch.FloatTensor([0.])
+                        min_fsd_n = torch.min(fsds_n)
+                        max_fsd_n = torch.max(fsds_n)
+                        minFSD3_n.append(min_fsd_n)
+                        maxFSD3_n.append(max_fsd_n)
+
+                        minFSD3.append(min_fsd)
+                        maxFSD3.append(max_fsd)
+                        stdFD3.append(std_fd)
+                        voAngles.append(vo_angle_mean)
+
 
                     num_agents2 = sq_error2.size(0)
                     num_agents3 = sq_error3.size(0)
 
-                    ade2 = sq_error2.mean(dim=-1) # A X T >> A
-                    fde2 = sq_error2[... , -1]
+                    ade2 = sq_error2.mean(dim=-1)  # A X T >> A
+                    fde2 = sq_error2[..., -1]
                     ade3 = sq_error3.mean(dim=-1)
-                    fde3 = sq_error3[... , -1]
-                    
+                    fde3 = sq_error3[..., -1]
+
                     # 2-Loss
-                    batch_minade2 = ade2.mean() # A >> 1
+                    batch_minade2 = ade2.mean()  # A >> 1
                     batch_minfde2 = fde2.mean()
                     batch_avgade2 = ade2.mean()
                     batch_avgfde2 = fde2.mean()
-                    
+
                     # 3-Loss
                     batch_minade3 = ade3.mean()
                     batch_minfde3 = fde3.mean()
                     batch_avgade3 = ade3.mean()
                     batch_avgfde3 = fde3.mean()
 
-                    print("Working on test {:d}/{:d}, batch {:d}/{:d}... ".format(test_time+1, self.test_times, b+1, len(self.data_loader)), end='\r')
+                    print("Working on test {:d}/{:d}, batch {:d}/{:d}... ".format(test_time + 1, self.test_times, b + 1,
+                                                                                  len(self.data_loader)), end='\r')
 
                     epoch_minade2 += batch_minade2.item() * num_agents2
                     epoch_avgade2 += batch_avgade2.item() * num_agents2
@@ -711,15 +762,15 @@ class ModelTest:
                     future_agents_traj_len = future_agents_traj_len.cpu().numpy()
 
                     for i in range(batch_size):
-                        candidate_i   = predicted_trajs[       cum_num_future_agents[i]:cum_num_future_agents[i+1]]
-                        future_traj_i = future_agents_traj[    cum_num_future_agents[i]:cum_num_future_agents[i+1]]
-                        future_lens_i = future_agents_traj_len[cum_num_future_agents[i]:cum_num_future_agents[i+1]]
-                        past_traj_i   = past_agents_traj[      cum_num_future_agents[i]:cum_num_future_agents[i+1]]
-                        past_lens_i   = past_agents_traj_len[  cum_num_future_agents[i]:cum_num_future_agents[i+1]]
+                        candidate_i = predicted_trajs[cum_num_future_agents[i]:cum_num_future_agents[i + 1]]
+                        future_traj_i = future_agents_traj[cum_num_future_agents[i]:cum_num_future_agents[i + 1]]
+                        future_lens_i = future_agents_traj_len[cum_num_future_agents[i]:cum_num_future_agents[i + 1]]
+                        past_traj_i = past_agents_traj[cum_num_future_agents[i]:cum_num_future_agents[i + 1]]
+                        past_lens_i = past_agents_traj_len[cum_num_future_agents[i]:cum_num_future_agents[i + 1]]
 
                         map_file_i = map_files[i]
                         output_file_i = output_files[i]
-                        
+
                         dao_i, dao_mask_i = self.dao(candidate_i, map_file_i)
                         dac_i, dac_mask_i = self.dac(candidate_i, map_file_i)
 
@@ -743,7 +794,7 @@ class ModelTest:
 
             list_dao.append(epoch_dao / dao_agents)
             list_dac.append(epoch_dac / dac_agents)
-        
+
         test_minade2 = [np.mean(list_minade2), np.std(list_minade2)]
         test_avgade2 = [np.mean(list_avgade2), np.std(list_avgade2)]
         test_minfde2 = [np.mean(list_minfde2), np.std(list_minfde2)]
@@ -757,18 +808,68 @@ class ModelTest:
         test_dao = [np.mean(list_dao), np.std(list_dao)]
         test_dac = [np.mean(list_dac), np.std(list_dac)]
 
-        test_ades = ( test_minade2, test_avgade2, test_minade3, test_avgade3 )
-        test_fdes = ( test_minfde2, test_avgfde2, test_minfde3, test_avgfde3 )
+        test_ades = (test_minade2, test_avgade2, test_minade3, test_avgade3)
+        test_fdes = (test_minfde2, test_avgfde2, test_minfde3, test_avgfde3)
+
+        print("\n--Final Performance Report--")
+        print("minADE3: {:.5f}".format(test_minade3[0]))
+        print("minFDE3: {:.5f}".format(test_minfde3[0]))
+        print("avgADE3: {:.5f}".format(test_avgade3[0]))
+        print("avgFDE3: {:.5f}".format(test_avgfde3[0]))
+        print("DAO: {:.5f}".format(test_dao[0] * 10000.0))
+        print("DAC: {:.5f}".format(test_dac[0]))
+        print("OffRoad rate: {:.5f}".format(1 - test_dac[0]))
+        RF3 = test_avgfde3[0] / test_minfde3[0]
+        print("RF3: {:.5f}".format(RF3))
+
+        minFSD3 = torch.FloatTensor(minFSD3)
+        maxFSD3 = torch.FloatTensor(maxFSD3)
+        stdFD3 = torch.FloatTensor(stdFD3)
+        voAngles = torch.FloatTensor(voAngles)
+        minFSD3_n = torch.FloatTensor(minFSD3_n)
+        maxFSD3_n = torch.FloatTensor(maxFSD3_n)
+        miss_or_not = torch.FloatTensor(miss_or_not)
+        print("minFSD3_n: {:.5f}".format(minFSD3_n.mean()))
+        print("maxFSD3_n: {:.5f}".format(maxFSD3_n.mean()))
+        print("minFSD3: {:.5f}".format(minFSD3.mean()))
+        print("maxFSD3: {:.5f}".format(maxFSD3.mean()))
+        print("stdFD3: {:.5f}".format(stdFD3.mean()))
+        print("voAngles: {:.5f}".format(voAngles.mean()))
+        print("miss rate: {:.5f}".format(miss_or_not.mean()))
+
+        results_data = {
+            'minADE3': list_minade3,
+            'minFDE3': list_minfde3,
+            'avgADE3': list_avgade3,
+            'avgFDE3': list_avgfde3,
+            'DAO': list_dao,
+            'DAC': list_dac,
+            'RF3': RF3,
+
+            'minFSD3_n': minFSD3_n.cpu().numpy(),
+            'maxFSD3_n': maxFSD3_n.cpu().numpy(),
+            'minFSD3': minFSD3.cpu().numpy(),
+            'maxFSD3': maxFSD3.cpu().numpy(),
+            'stdFD3': stdFD3.cpu().numpy(),
+            'voAngles': voAngles.cpu().numpy(),
+            'miss_rate': miss_or_not.cpu().numpy()
+        }
+
+        with open('results.pkl', 'wb') as f:
+            pkl.dump(results_data, f)
 
         print("--Final Performane Report--")
-        print("minADE3: {:.5f}±{:.5f}, minFDE3: {:.5f}±{:.5f}".format(test_minade3[0], test_minade3[1], test_minfde3[0], test_minfde3[1]))
-        print("avgADE3: {:.5f}±{:.5f}, avgFDE3: {:.5f}±{:.5f}".format(test_avgade3[0], test_avgade3[1], test_avgfde3[0], test_avgfde3[1]))
-        print("DAO: {:.5f}±{:.5f}, DAC: {:.5f}±{:.5f}".format(test_dao[0] * 10000.0, test_dao[1] * 10000.0, test_dac[0], test_dac[1]))
-        with open(self.out_dir + '/metric.pkl', 'wb') as f:
-            pkl.dump({"ADEs": test_ades,
-                      "FDEs": test_fdes,
-                      "DAO": test_dao,
-                      "DAC": test_dac}, f)
+        print("minADE3: {:.5f}±{:.5f}, minFDE3: {:.5f}±{:.5f}".format(test_minade3[0], test_minade3[1], test_minfde3[0],
+                                                                      test_minfde3[1]))
+        print("avgADE3: {:.5f}±{:.5f}, avgFDE3: {:.5f}±{:.5f}".format(test_avgade3[0], test_avgade3[1], test_avgfde3[0],
+                                                                      test_avgfde3[1]))
+        print("DAO: {:.5f}±{:.5f}, DAC: {:.5f}±{:.5f}".format(test_dao[0] * 10000.0, test_dao[1] * 10000.0, test_dac[0],
+                                                              test_dac[1]))
+        # with open(self.out_dir + '/metric.pkl', 'wb') as f:
+        #     pkl.dump({"ADEs": test_ades,
+        #               "FDEs": test_fdes,
+        #               "DAO": test_dao,
+        #               "DAC": test_dac}, f)
 
     @staticmethod
     def dac(gen_trajs, map_file):
@@ -779,12 +880,21 @@ class ModelTest:
             with open(map_file, 'rb') as pnt:
                 map_array = pkl.load(pnt)
 
+        else:
+            with open(map_file, 'rb') as f:
+                map_img = pkl.load(f)
+                drivable_area, road_divider, lane_divider = map_img
+            _, drivable_area = cv2.threshold(drivable_area, 0, 255, cv2.THRESH_BINARY)
+            _, road_divider = cv2.threshold(road_divider, 0, 255, cv2.THRESH_BINARY)
+            drivable_area = drivable_area - road_divider
+            map_array = cv2.resize(drivable_area, (128, 128))[..., np.newaxis]
+
         da_mask = np.any(map_array > 0, axis=-1)
 
         num_agents, num_candidates, decoding_timesteps = gen_trajs.shape[:3]
         dac = []
 
-        gen_trajs = ((gen_trajs + 56) * 2).astype(np.int64)
+        gen_trajs = ((gen_trajs + 32) * 2).astype(np.int64)
 
         stay_in_da_count = [0 for i in range(num_agents)]
         for k in range(num_candidates):
@@ -792,14 +902,14 @@ class ModelTest:
 
             stay_in_da = [True for i in range(num_agents)]
 
-            oom_mask = np.any( np.logical_or(gen_trajs_k >= 224, gen_trajs_k < 0), axis=-1 )
+            oom_mask = np.any(np.logical_or(gen_trajs_k >= 128, gen_trajs_k < 0), axis=-1)
             diregard_mask = oom_mask.sum(axis=-1) > 2
             for t in range(decoding_timesteps):
                 gen_trajs_kt = gen_trajs_k[:, t]
                 oom_mask_t = oom_mask[:, t]
                 x, y = gen_trajs_kt.T
 
-                lin_xy = (x*224+y)
+                lin_xy = (x * 128 + y)
                 lin_xy[oom_mask_t] = -1
                 for i in range(num_agents):
                     xi, yi = x[i], y[i]
@@ -814,17 +924,17 @@ class ModelTest:
 
                     if not da_mask[yi, xi] or (lin_xyi in _lin_xy):
                         stay_in_da[i] = False
-            
+
             for i in range(num_agents):
                 if stay_in_da[i]:
                     stay_in_da_count[i] += 1
-        
+
         for i in range(num_agents):
             if diregard_mask[i]:
                 dac.append(0.0)
             else:
                 dac.append(stay_in_da_count[i] / num_candidates)
-        
+
         dac_mask = np.logical_not(diregard_mask)
 
         return np.array(dac), dac_mask
@@ -838,6 +948,15 @@ class ModelTest:
             with open(map_file, 'rb') as pnt:
                 map_array = pkl.load(pnt)
 
+        else:
+            with open(map_file, 'rb') as f:
+                map_img = pkl.load(f)
+                drivable_area, road_divider, lane_divider = map_img
+            _, drivable_area = cv2.threshold(drivable_area, 0, 255, cv2.THRESH_BINARY)
+            _, road_divider = cv2.threshold(road_divider, 0, 255, cv2.THRESH_BINARY)
+            drivable_area = drivable_area - road_divider
+            map_array = cv2.resize(drivable_area, (128, 128))[..., np.newaxis]
+
         da_mask = np.any(map_array > 0, axis=-1)
 
         num_agents, num_candidates, decoding_timesteps = gen_trajs.shape[:3]
@@ -845,12 +964,12 @@ class ModelTest:
 
         occupied = [[] for i in range(num_agents)]
 
-        gen_trajs = ((gen_trajs + 56) * 2).astype(np.int64)
+        gen_trajs = ((gen_trajs + 32) * 2).astype(np.int64)
 
         for k in range(num_candidates):
             gen_trajs_k = gen_trajs[:, k]
 
-            oom_mask = np.any( np.logical_or(gen_trajs_k >= 224, gen_trajs_k < 0), axis=-1 )
+            oom_mask = np.any(np.logical_or(gen_trajs_k >= 128, gen_trajs_k < 0), axis=-1)
             diregard_mask = oom_mask.sum(axis=-1) > 2
 
             for t in range(decoding_timesteps):
@@ -858,7 +977,7 @@ class ModelTest:
                 oom_mask_t = oom_mask[:, t]
                 x, y = gen_trajs_kt.T
 
-                lin_xy = (x*224+y)
+                lin_xy = (x * 128 + y)
                 lin_xy[oom_mask_t] = -1
                 for i in range(num_agents):
                     xi, yi = x[i], y[i]
@@ -885,7 +1004,7 @@ class ModelTest:
                 dao[i] /= da_mask.sum()
 
         dao_mask = np.logical_not(diregard_mask)
-        
+
         return np.array(dao), dao_mask
 
     @staticmethod
@@ -901,7 +1020,7 @@ class ModelTest:
 
         H, W = map_array.shape[:2]
         fig = plt.figure(figsize=(float(H) / float(80), float(W) / float(80)),
-                        facecolor='k', dpi=80)
+                         facecolor='k', dpi=80)
 
         ax = plt.axes()
         ax.imshow(map_array, extent=[-56, 56, 56, -56])
@@ -911,10 +1030,10 @@ class ModelTest:
 
         plt.gca().invert_yaxis()
         plt.gca().set_axis_off()
-        plt.subplots_adjust(top = 1, bottom = 0, right = 1, left = 0, 
-                            hspace = 0, wspace = 0)
-        plt.margins(0,0)
-        
+        plt.subplots_adjust(top=1, bottom=0, right=1, left=0,
+                            hspace=0, wspace=0)
+        plt.margins(0, 0)
+
         num_agents, num_candidates = gen_trajs.shape[:2]
         for k in range(num_candidates):
             gen_trajs_k = gen_trajs[:, k]
@@ -932,20 +1051,20 @@ class ModelTest:
         x_pts = []
         y_pts = []
         for i in range(num_agents):
-                src_traj_i = src_trajs[i]
-                src_len_i = src_lens[i]
-                x_pts.extend(src_traj_i[:src_len_i, 0])
-                y_pts.extend(src_traj_i[:src_len_i, 1])
+            src_traj_i = src_trajs[i]
+            src_len_i = src_lens[i]
+            x_pts.extend(src_traj_i[:src_len_i, 0])
+            y_pts.extend(src_traj_i[:src_len_i, 1])
 
         ax.scatter(x_pts, y_pts, s=0.5, marker='x')
 
         x_pts = []
         y_pts = []
         for i in range(num_agents):
-                tgt_traj_i = tgt_trajs[i]
-                tgt_len_i = tgt_lens[i]
-                x_pts.extend(tgt_traj_i[:tgt_len_i, 0])
-                y_pts.extend(tgt_traj_i[:tgt_len_i, 1])
+            tgt_traj_i = tgt_trajs[i]
+            tgt_len_i = tgt_lens[i]
+            x_pts.extend(tgt_traj_i[:tgt_len_i, 0])
+            y_pts.extend(tgt_traj_i[:tgt_len_i, 1])
 
         ax.scatter(x_pts, y_pts, s=0.5, marker='o')
 

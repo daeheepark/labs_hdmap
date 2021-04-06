@@ -1,0 +1,11 @@
+# @package _group_
+dataset_path: '/datasets/nuscene/v1.0-trainval_meta'
+version: 'v1.0-trainval'
+sampling_time: 3
+agent_time: 0
+resolution: 0.1
+meters_ahead: 32
+meters_behind: 32
+meters_left: 32
+meters_right: 32
+load_dir: '/home/q10/ws/repos/naverlabs2020/nus_dataset/cmu_dataset'

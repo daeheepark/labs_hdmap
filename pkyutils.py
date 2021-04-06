@@ -37,10 +37,6 @@ def calculateCurve(points):
     if np.linalg.norm(a) == 0 or np.linalg.norm(b) < 3.0:
         return 0.0
 
-    # au = a / np.linalg.norm(a)
-    # bu = b / np.linalg.norm(b)
-    # return np.arccos(np.clip(np.dot(au, bu), -1.0, 1.0))
-
     angle = np.arccos(np.clip(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)), -1.0, 1.0))
     if angle > np.pi:
         angle = 2 * np.pi - angle
@@ -113,6 +109,7 @@ class NusCustomParser(Dataset):
         # past, future trajectory
         for path_global in xy_global[:2]:
             pose_xy = []
+
             for path_global_i in path_global:
                 if len(path_global_i) == 0:
                     pose_xy.append(path_global_i)
@@ -395,7 +392,7 @@ class DatasetQ10(torch.utils.data.dataset.Dataset):
         if data_partition == 'train':
             self.ids = self.ids[: int(n * (1 - val_ratio))]
         elif data_partition == 'val':
-            self.ids = self.ids[: int(n * val_ratio)]
+            self.ids = self.ids[int(n * val_ratio):]
 
         if shuffle:
             np.random.shuffle(self.ids)

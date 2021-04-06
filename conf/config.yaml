@@ -1,0 +1,3 @@
+defaults:
+  - dataset: nuscenes
+  - model: DATF_basic

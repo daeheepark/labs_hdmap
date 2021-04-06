@@ -221,53 +221,25 @@ class ModelTrainer:
 
             scene_images = scene_images.to(self.device)
 
-            data_format = 'cmu'
+            past_agents_traj = past_agents_traj.to(self.device)
+            past_agents_traj_len = past_agents_traj_len.to(self.device)
+            future_agents_traj = future_agents_traj.to(self.device)[three_mask]
+            future_agents_traj_len = future_agents_traj_len.to(self.device)[three_mask]
 
-            if data_format == 'cmu':
-                past_agents_traj = past_agents_traj.to(self.device)
-                past_agents_traj_len = past_agents_traj_len.to(self.device)
-                future_agents_traj = future_agents_traj.to(self.device)[three_mask]
-                future_agents_traj_len = future_agents_traj_len.to(self.device)[three_mask]
+            num_future_agents = num_future_agents.to(self.device)
+            episode_idx = torch.arange(batch_size, device=self.device).repeat_interleave(num_future_agents)[
+                three_mask]
 
-                num_future_agents = num_future_agents.to(self.device)
-                episode_idx = torch.arange(batch_size, device=self.device).repeat_interleave(num_future_agents)[
-                    three_mask]
+            future_agent_masks = future_agent_masks.to(self.device)
+            agent_tgt_three_mask = torch.zeros_like(future_agent_masks)
+            agent_masks_idx = torch.arange(len(future_agent_masks), device=self.device)[future_agent_masks][
+                three_mask]
+            agent_tgt_three_mask[agent_masks_idx] = True
 
-                future_agent_masks = future_agent_masks.to(self.device)
-                agent_tgt_three_mask = torch.zeros_like(future_agent_masks)
-                agent_masks_idx = torch.arange(len(future_agent_masks), device=self.device)[future_agent_masks][
-                    three_mask]
-                agent_tgt_three_mask[agent_masks_idx] = True
+            future_agent_masks = future_agent_masks.to(self.device)
 
-                future_agent_masks = future_agent_masks.to(self.device)
-
-                decode_start_vel = decode_start_vel.to(self.device)[agent_tgt_three_mask]
-                decode_start_pos = decode_start_pos.to(self.device)[agent_tgt_three_mask]
-            elif data_format == 'custom':
-                mask_comb = future_agent_masks * three_mask
-                mask_comb = mask_comb.to(self.device)
-
-                future_agent_masks = future_agent_masks.to(self.device)
-                agent_tgt_three_mask = torch.zeros_like(future_agent_masks)
-
-                agent_masks_idx = torch.arange(len(future_agent_masks), device=self.device)[mask_comb]
-                agent_tgt_three_mask[agent_masks_idx] = True
-
-                past_agents_traj = past_agents_traj.to(self.device)
-                past_agents_traj_len = past_agents_traj_len.to(self.device)
-
-                future_agents_traj = future_agents_traj.to(self.device)[three_mask]
-                future_agents_traj_len = future_agents_traj_len.to(self.device)[three_mask]
-
-                num_future_agents = num_future_agents.to(self.device)
-                episode_idx = torch.arange(batch_size, device=self.device).repeat_interleave(num_future_agents)[
-                    three_mask]
-
-                future_agent_masks = future_agent_masks.to(self.device)
-
-                decode_start_vel = decode_start_vel.to(self.device)[mask_comb]
-                decode_start_pos = decode_start_pos.to(self.device)[mask_comb]
-                pass
+            decode_start_vel = decode_start_vel.to(self.device)[agent_tgt_three_mask]
+            decode_start_pos = decode_start_pos.to(self.device)[agent_tgt_three_mask]
 
             log_prior = log_prior.to(self.device)
             if self.flow_based_decoder:
@@ -277,7 +249,7 @@ class ModelTrainer:
                 # sigma_: A X Td X 2 X 2
                 # Generate perturbation
                 perterb = torch.normal(mean=0.0, std=np.sqrt(0.001), size=future_agents_traj.shape, device=self.device)
-
+                z_, mu_, sigma_, motion_encoding_, scene_encoding_ = None, None, None, None, None
                 if self.model_type == 'R2P2_SimpleRNN':
                     z_, mu_, sigma_, motion_encoding_ = self.model.infer(future_agents_traj + perterb, past_agents_traj,
                                                                          decode_start_vel, decode_start_pos)
@@ -323,16 +295,23 @@ class ModelTrainer:
                                                                                           decode_start_pos,
                                                                                           num_past_agents, scene_images)
 
+                '''
+                z_ : torch.Size([agent_num, 6, 2])
+                mu_ : torch.Size([agent_num, 6, 2])
+                sigma_ : torch.Size([agent_num, 6, 2, 2])
+                motion_encoding_ : torch.Size([agent_num, 128])
+                scene_encoding_ : (torch.Size([3, 6, 100, 100]), torch.Size([3, 1024, 32]))
+                '''
+
                 z_ = z_.reshape((num_three_agents, -1))  # A X (Td*2)
                 log_q0 = c1 - 0.5 * ((z_ ** 2).sum(dim=1))
-
                 logdet_sigma = log_determinant(sigma_)
-
                 log_qpi = log_q0 - logdet_sigma.sum(dim=1)
                 qloss = -log_qpi
                 batch_qloss = qloss.mean()
 
                 # Prior Loss (p loss)
+                gen_trajs, z, mu, sigma = None, None, None, None
                 if self.model_type == 'R2P2_SimpleRNN':
                     gen_trajs, z, mu, sigma = self.model(motion_encoding_, decode_start_vel, decode_start_pos,
                                                          motion_encoded=True)
@@ -791,7 +770,8 @@ class ModelTest:
             self.map_version = '2.0'
 
         if self.model_type in ["R2P2_SimpleRNN", "R2P2_RNN", "CAM_NFDecoder", "Scene_CAM_NFDecoder",
-                               "Global_Scene_CAM_NFDecoder", "AttGlobal_Scene_CAM_NFDecoder"]:
+                               "Global_Scene_CAM_NFDecoder", "AttGlobal_Scene_CAM_NFDecoder",
+                               "Global_Scene_CAM_DSF_NFDecoder", "AttGlobal_Scene_CAM_DSF_NFDecoder"]:
             self.flow_based_decoder = True
             self.num_candidates = args.num_candidates
 
@@ -804,9 +784,12 @@ class ModelTest:
         self.render = args.test_render
         self.test_times = args.test_times
 
-        self.data_dir = os.path.join(args.load_dir, args.version)
+        import hydra
+        # self.data_dir = os.path.join(args.load_dir, args.version)
+        self.data_dir = hydra.utils.to_absolute_path(args.load_dir)
 
-        self.test_ckpt = args.test_ckpt.split('/')[-2] + "_" + args.test_ckpt.split('/')[-1]
+        # self.test_ckpt = args.test_ckpt.split('/')[-2] + "_" + args.test_ckpt.split('/')[-1]
+        self.test_ckpt = args.test_ckpt
         self.test_partition = self.data_dir.split('/')[-1]
 
         # if args.dataset == "argoverse":
@@ -827,6 +810,7 @@ class ModelTest:
         self.load_checkpoint(args.test_ckpt)
 
     def load_checkpoint(self, ckpt):
+        print('load checkpoint from:', ckpt)
         checkpoint = torch.load(ckpt)
         self.model.load_state_dict(checkpoint['model_state'], strict=False)
 
@@ -852,6 +836,8 @@ class ModelTest:
         voAngles = []
         minFSD3_n = []
         maxFSD3_n = []
+
+        miss_or_not = []
 
         for test_time in range(self.test_times):
 
@@ -1053,8 +1039,8 @@ class ModelTest:
                                                    decode_start_pos, num_src_trajs)
 
                         gen_trajs = gen_trajs.reshape(num_three_agents, self.num_candidates, self.decoding_steps, 2)
-
-                    rs_error3 = ((gen_trajs - tgt_trajs.unsqueeze(1)) ** 2).sum(dim=-1).sqrt_()
+                    # gen_trajs - [agents_num, 6, 6, 2]
+                    rs_error3 = ((gen_trajs - tgt_trajs.unsqueeze(1)) ** 2).sum(dim=-1).sqrt_()  # [agents_num, 6, 6]
                     rs_error2 = rs_error3[..., :int(self.decoding_steps * 2 / 3)]
 
                     diff = gen_trajs - tgt_trajs.unsqueeze(1)
@@ -1065,6 +1051,11 @@ class ModelTest:
                     # print(gen_trajs[0][:, 0, :].squeeze())  # start
                     # print(gen_trajs[0][:, 5, :].squeeze())  # final
                     # print(decode_start_pos[0])
+
+                    # Miss Rate
+                    rs_error3_max = rs_error3.max(dim=-1).values  # [agents_num, 6]
+                    for error3_max in rs_error3_max:
+                        miss_or_not.append(torch.min(error3_max >= 2.))  # True or False (miss: true)
 
                     def cal_vo_angle(path1, path2):
                         vo_angles_ = []
@@ -1213,8 +1204,10 @@ class ModelTest:
                         src_traj_i = src_traj_i[agent_tgt_three_mask[cum_num_src_trajs[i]:cum_num_src_trajs[i + 1]]]
                         src_lens_i = src_lens_i[agent_tgt_three_mask[cum_num_src_trajs[i]:cum_num_src_trajs[i + 1]]]
 
-                        dao_i, dao_mask_i = self.dao(candidate_i, map_file_i, img=batch[0][i])
-                        dac_i, dac_mask_i = self.dac(candidate_i, map_file_i, img=batch[0][i])
+                        dao_i, dao_mask_i = self.dao(candidate_i, map_file_i)
+                        dac_i, dac_mask_i = self.dac(candidate_i, map_file_i)
+                        # dao_i, dao_mask_i = self.dao(candidate_i, map_file_i, img=batch[0][i])
+                        # dac_i, dac_mask_i = self.dac(candidate_i, map_file_i, img=batch[0][i])
 
                         epoch_dao += dao_i.sum()
                         dao_agents += dao_mask_i.sum()
@@ -1277,13 +1270,23 @@ class ModelTest:
         test_ades = (test_minade2, test_avgade2, test_minade3, test_avgade3)
         test_fdes = (test_minfde2, test_avgfde2, test_minfde3, test_avgfde3)
 
-        print("--Final Performance Report--")
-        print("minADE3: {:.5f}±{:.5f}, minFDE3: {:.5f}±{:.5f}".format(test_minade3[0], test_minade3[1], test_minfde3[0],
-                                                                      test_minfde3[1]))
-        print("avgADE3: {:.5f}±{:.5f}, avgFDE3: {:.5f}±{:.5f}".format(test_avgade3[0], test_avgade3[1], test_avgfde3[0],
-                                                                      test_avgfde3[1]))
-        print("DAO: {:.5f}±{:.5f}, DAC: {:.5f}±{:.5f}".format(test_dao[0] * 10000.0, test_dao[1] * 10000.0, test_dac[0],
-                                                              test_dac[1]))
+        print("\n--Final Performance Report--")
+        # print("minADE3: {:.5f}±{:.5f}, minFDE3: {:.5f}±{:.5f}".format(
+        #     test_minade3[0], test_minade3[1], test_minfde3[0], test_minfde3[1]))
+        # print("avgADE3: {:.5f}±{:.5f}, avgFDE3: {:.5f}±{:.5f}".format(
+        #     test_avgade3[0], test_avgade3[1], test_avgfde3[0], test_avgfde3[1]))
+        # print("DAO: {:.5f}±{:.5f}, DAC: {:.5f}±{:.5f}".format(
+        #     test_dao[0] * 10000.0, test_dao[1] * 10000.0, test_dac[0], test_dac[1]))
+
+        print("minADE3: {:.5f}".format(test_minade3[0]))
+        print("minFDE3: {:.5f}".format(test_minfde3[0]))
+        print("avgADE3: {:.5f}".format(test_avgade3[0]))
+        print("avgFDE3: {:.5f}".format(test_avgfde3[0]))
+        print("DAO: {:.5f}".format(test_dao[0] * 10000.0))
+        print("DAC: {:.5f}".format(test_dac[0]))
+        print("OffRoad rate: {:.5f}".format(1 - test_dac[0]))
+        RF3 = test_avgfde3[0] / test_minfde3[0]
+        print("RF3: {:.5f}".format(RF3))
 
         minFSD3 = torch.FloatTensor(minFSD3)
         maxFSD3 = torch.FloatTensor(maxFSD3)
@@ -1291,12 +1294,35 @@ class ModelTest:
         voAngles = torch.FloatTensor(voAngles)
         minFSD3_n = torch.FloatTensor(minFSD3_n)
         maxFSD3_n = torch.FloatTensor(maxFSD3_n)
+        miss_or_not = torch.FloatTensor(miss_or_not)
         print("minFSD3_n: {:.5f}".format(minFSD3_n.mean()))
         print("maxFSD3_n: {:.5f}".format(maxFSD3_n.mean()))
         print("minFSD3: {:.5f}".format(minFSD3.mean()))
         print("maxFSD3: {:.5f}".format(maxFSD3.mean()))
         print("stdFD3: {:.5f}".format(stdFD3.mean()))
         print("voAngles: {:.5f}".format(voAngles.mean()))
+        print("miss rate: {:.5f}".format(miss_or_not.mean()))
+
+        results_data = {
+            'minADE3': list_minade3,
+            'minFDE3': list_minfde3,
+            'avgADE3': list_avgade3,
+            'avgFDE3': list_avgfde3,
+            'DAO': list_dao,
+            'DAC': list_dac,
+            'RF3': RF3,
+
+            'minFSD3_n': minFSD3_n.cpu().numpy(),
+            'maxFSD3_n': maxFSD3_n.cpu().numpy(),
+            'minFSD3': minFSD3.cpu().numpy(),
+            'maxFSD3': maxFSD3.cpu().numpy(),
+            'stdFD3': stdFD3.cpu().numpy(),
+            'voAngles': voAngles.cpu().numpy(),
+            'miss_rate': miss_or_not.cpu().numpy()
+        }
+
+        with open('results.pkl', 'wb') as f:
+            pkl.dump(results_data, f)
 
         plt.figure(figsize=(36, 4))
         plt.subplot(1, 4, 1)
@@ -1325,11 +1351,11 @@ class ModelTest:
 
         plt.show()
 
-        with open(self.out_dir + '/{}_{}_metric.txt'.format(self.test_ckpt, self.test_partition), 'w') as f:
+        results_save_path = '{}_{}_metric.txt'.format(
+            self.test_ckpt.split('/')[-2], self.test_ckpt.split('/')[-1].split('.')[0])
+        with open(results_save_path, 'w') as f:
             f.write('ADEs: {} \n FDEs: {} \n Qloss: {} \n Ploss: {} \n DAO: {} \n DAC: {}'.format(
                 test_ades, test_fdes, test_qloss, test_ploss, test_dao, test_dac))
-            # pkl.dump('ADEs: {} \n FDEs: {} \n Qloss: {} \n Ploss: {}'.format(
-            #     test_ades, test_fdes, test_qloss, test_ploss), f)
 
     @staticmethod
     def q10testsingle(model, batch, device):
@@ -1441,13 +1467,21 @@ class ModelTest:
                 map_array = np.asarray(map_array)[0]
                 map_array = cv2.resize(map_array, (128, 128))[..., np.newaxis]
             else:
-                with open(map_file, 'rb') as pnt:
-                    map_array = pkl.load(pnt)
-                    map_array = np.asarray(map_array)[0]
-                    map_array = cv2.resize(map_array, (128, 128))[..., np.newaxis]
+                with open(map_file, 'rb') as f:
+                    map_img = pkl.load(f)
+                    drivable_area, road_divider, lane_divider = map_img
+                _, drivable_area = cv2.threshold(drivable_area, 0, 255, cv2.THRESH_BINARY)
+                _, road_divider = cv2.threshold(road_divider, 0, 255, cv2.THRESH_BINARY)
+                drivable_area = drivable_area - road_divider
+                map_array = cv2.resize(drivable_area, (128, 128))[..., np.newaxis]
+            # else:
+            #     with open(map_file, 'rb') as pnt:
+            #         map_array = pkl.load(pnt)
+            #         map_array = np.asarray(map_array)[0]
+            #         map_array = cv2.resize(map_array, (128, 128))[..., np.newaxis]
 
-        # da_mask = np.any(map_array > 0, axis=-1)
-        da_mask = np.any(map_array > np.min(map_array), axis=-1)
+        da_mask = np.any(map_array > 0, axis=-1)
+        # da_mask = np.any(map_array > np.min(map_array), axis=-1)
 
         num_agents, num_candidates, decoding_timesteps = gen_trajs.shape[:3]
         dac = []
@@ -1515,14 +1549,24 @@ class ModelTest:
                 map_array = copy.deepcopy(img)
                 map_array = np.asarray(map_array)[0]
                 map_array = cv2.resize(map_array, (128, 128))[..., np.newaxis]
-            else:
-                with open(map_file, 'rb') as pnt:
-                    map_array = pkl.load(pnt)
-                    map_array = np.asarray(map_array)[0]
-                    map_array = cv2.resize(map_array, (128, 128))[..., np.newaxis]
 
-        # da_mask = np.any(map_array > 0, axis=-1)
-        da_mask = np.any(map_array > np.min(map_array), axis=-1)
+            else:
+                with open(map_file, 'rb') as f:
+                    map_img = pkl.load(f)
+                    drivable_area, road_divider, lane_divider = map_img
+                _, drivable_area = cv2.threshold(drivable_area, 0, 255, cv2.THRESH_BINARY)
+                _, road_divider = cv2.threshold(road_divider, 0, 255, cv2.THRESH_BINARY)
+                drivable_area = drivable_area - road_divider
+                map_array = cv2.resize(drivable_area, (128, 128))[..., np.newaxis]
+
+            # else:
+            #     with open(map_file, 'rb') as pnt:
+            #         map_array = pkl.load(pnt)
+            #         map_array = np.asarray(map_array)[0]
+            #         map_array = cv2.resize(map_array, (128, 128))[..., np.newaxis]
+
+        da_mask = np.any(map_array > 0, axis=-1)
+        # da_mask = np.any(map_array > np.min(map_array), axis=-1)
 
         num_agents, num_candidates, decoding_timesteps = gen_trajs.shape[:3]
         dao = [0 for i in range(num_agents)]
@@ -1646,4 +1690,5 @@ class ModelTest:
         plt.close(fig)
 
     def map_file(self, scene_id):
-        return '{}/map/{}.bin'.format(self.data_dir, scene_id)
+        return '{}/{}/map.bin'.format(self.data_dir, scene_id)
+        # return '{}/map/{}.bin'.format(self.data_dir, scene_id)
