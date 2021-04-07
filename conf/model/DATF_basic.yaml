@@ -9,7 +9,8 @@ gpu_devices: '0'
 flow_based_decoder: True
 
 mode: 'train'  # train | test | viz
-load_dir: '/home/q10/ws/repos/naverlabs2020/nus_dataset/cmu_dataset'
+#load_dir: '/home/q10/ws/repos/naverlabs2020/nus_dataset/cmu_dataset'
+load_dir: '/home/user/datasets/cmu_dataset'
 
 # Trajectory Parameters
 sample_stride: 1
@@ -67,11 +68,13 @@ test_dir: None
 test_times: 1  # Number of test trials to calculate std
 test_render: 1  # Whether to render the outputs as figure
 
-test_ckpt: '/home/q10/ws/repos/naverlabs2020/labs_hdmap (copy)/experiment/AttGlobal_Scene_CAM_NFDecoder__05_April__05_46_/epoch100.pth.tar'
+#test_ckpt: '/home/q10/ws/repos/naverlabs2020/labs_hdmap (copy)/experiment/AttGlobal_Scene_CAM_NFDecoder__05_April__05_46_/epoch100.pth.tar'
 #test_ckpt: '/home/q10/ws/repos/naverlabs2020/labs_hdmap (copy)/experiment/SocialPooling__05_April__16_40_/epoch100.pth.tar'
 #test_ckpt: '/home/q10/ws/repos/naverlabs2020/labs_hdmap (copy)/experiment/Desire__05_April__16_42_/epoch100.pth.tar'
 #test_ckpt: '/home/q10/ws/repos/naverlabs2020/labs_hdmap (copy)/experiment/R2P2_RNN__05_April__17_16_/epoch100.pth.tar'
 #test_ckpt: '/home/q10/ws/repos/naverlabs2020/labs_hdmap (copy)/experiment/MATF__06_April__00_59_/epoch100.pth.tar'
+
+test_ckpt: '/home/user/hhhh_test.pth.tar'
 
 version: 'v1.0-trainval'
 data_type: 'real'

@@ -8,4 +8,5 @@ meters_ahead: 32
 meters_behind: 32
 meters_left: 32
 meters_right: 32
-load_dir: '/home/q10/ws/repos/naverlabs2020/nus_dataset/cmu_dataset'
+# load_dir: '/home/q10/ws/repos/naverlabs2020/nus_dataset/cmu_dataset'
+load_dir: '/home/user/datasets/cmu_dataset'
