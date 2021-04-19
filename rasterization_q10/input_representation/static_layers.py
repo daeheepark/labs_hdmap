@@ -328,12 +328,13 @@ class StaticLayerRasterizer(StaticLayerRepresentation):
         images = []
         for mask, color in zip(masks, self.colors):
             images.append(change_color_of_binary_mask(np.repeat(mask[::-1, :, np.newaxis], 3, 2), color))
+        map_img = self.combinator.combine(images)
         images.append(rotated_image_lanes)
-        image_show = self.combinator.combine(images)
+        map_img_with_lanes = self.combinator.combine(images)
 
         # crop
         row_crop, col_crop = get_crops(self.meters_ahead, self.meters_behind, self.meters_left,
                                        self.meters_right, self.resolution,
                                        int(image_side_length / self.resolution))
 
-        return np.array(images)[:, row_crop, col_crop, :], lanes, image_show
+        return np.array(images)[:, row_crop, col_crop, :], lanes, map_img, map_img_with_lanes

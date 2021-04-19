@@ -42,7 +42,8 @@ class ModelTrainer:
         self.logger.setLevel(logging.INFO)
         fh = logging.FileHandler(os.path.join(self.exp_path, 'training.log'))
         sh = logging.StreamHandler(sys.stdout)
-        fh.setFormatter(logging.Formatter("%(asctime)s %(message)s", datefmt='%Y-%m-%d %H:%M:%S'))
+        fh.setFormatter(logging.Formatter(
+            "%(asctime)s %(message)s", datefmt='%Y-%m-%d %H:%M:%S'))
         sh.setFormatter(logging.Formatter("%(message)s"))
         self.logger.addHandler(fh)
         self.logger.addHandler(sh)
@@ -70,7 +71,8 @@ class ModelTrainer:
         self.ploss_criterion = ploss_criterion
 
         self.optimizer = optimizer
-        self.scheduler = ReduceLROnPlateau(self.optimizer, factor=(1 / 2), verbose=True, patience=3)
+        self.scheduler = ReduceLROnPlateau(
+            self.optimizer, factor=(1 / 2), verbose=True, patience=3)
 
         if args.load_ckpt:
             self.load_checkpoint(args.load_ckpt)
@@ -99,7 +101,7 @@ class ModelTrainer:
             train_loss, train_qloss, train_ploss, train_ades, train_fdes = self.train_single_epoch()
             valid_loss, valid_qloss, valid_ploss, valid_ades, valid_fdes, scheduler_metric = self.inference()
 
-            ## unwrapping ADEs/FDEs
+            # unwrapping ADEs/FDEs
             train_minade2, train_avgade2, train_minade3, train_avgade3 = train_ades
             train_minfde2, train_avgfde2, train_minfde3, train_avgfde3 = train_fdes
 
@@ -128,7 +130,8 @@ class ModelTrainer:
             self.logger.info(logging_msg1)
             self.logger.info(logging_msg2)
 
-            self.save_checkpoint(epoch, qloss=valid_qloss, ploss=valid_ploss, ade=valid_minade3, fde=valid_minfde3)
+            self.save_checkpoint(
+                epoch, qloss=valid_qloss, ploss=valid_ploss, ade=valid_minade3, fde=valid_minfde3)
 
             # Log values to Tensorboard
             self.writter.add_scalar('data/Train_Loss', train_loss, epoch)
@@ -145,7 +148,8 @@ class ModelTrainer:
             self.writter.add_scalar('data/Train_avgFDE2', train_avgfde2, epoch)
             self.writter.add_scalar('data/Train_avgADE3', train_avgade3, epoch)
             self.writter.add_scalar('data/Train_avgFDE3', train_avgfde3, epoch)
-            self.writter.add_scalar('data/Scheduler_Metric', scheduler_metric, epoch)
+            self.writter.add_scalar(
+                'data/Scheduler_Metric', scheduler_metric, epoch)
 
             self.writter.add_scalar('data/Valid_Loss', valid_loss, epoch)
             self.writter.add_scalar('data/Valid_QLoss', valid_qloss, epoch)
@@ -162,7 +166,8 @@ class ModelTrainer:
 
         self.writter.close()
         self.logger.info("Training Complete! ")
-        self.logger.info(f'| Best Valid ADE: {self.best_valid_ade} | Best Valid FDE: {self.best_valid_fde} |')
+        self.logger.info(
+            f'| Best Valid ADE: {self.best_valid_ade} | Best Valid FDE: {self.best_valid_fde} |')
 
     def train_single_epoch(self):
         """Trains the model for a single round."""
@@ -187,7 +192,8 @@ class ModelTrainer:
                 coordinate_std, coordinate_mean = torch.std_mean(coordinate)
                 coordinate = (coordinate - coordinate_mean) / coordinate_std
 
-                distance_2d = coordinate_2d - np.array([(H - 1) / 2, (H - 1) / 2]).reshape((2, 1, 1))
+                distance_2d = coordinate_2d - \
+                    np.array([(H - 1) / 2, (H - 1) / 2]).reshape((2, 1, 1))
                 distance = np.sqrt((distance_2d ** 2).sum(axis=0))
                 distance = torch.FloatTensor(distance)
                 distance = distance.reshape((1, 1, H, W))
@@ -203,12 +209,12 @@ class ModelTrainer:
             self.optimizer.zero_grad()
 
             scene_images, log_prior, \
-            future_agent_masks, \
-            num_past_agents, past_agents_traj, past_agents_traj_len, past_agents_traj_len_idx, \
-            num_future_agents, future_agents_traj, future_agents_traj_len, future_agents_traj_len_idx, \
-            two_mask, three_mask, \
-            decode_start_vel, decode_start_pos, \
-            scene_id = batch
+                future_agent_masks, \
+                num_past_agents, past_agents_traj, past_agents_traj_len, past_agents_traj_len_idx, \
+                num_future_agents, future_agents_traj, future_agents_traj_len, future_agents_traj_len_idx, \
+                two_mask, three_mask, \
+                decode_start_vel, decode_start_pos, \
+                scene_id = batch
 
             # Detect dynamic sizes
             batch_size = scene_images.size(0)
@@ -217,57 +223,33 @@ class ModelTrainer:
             if self.map_version == '2.0':
                 coordinate_batch = coordinate.repeat(batch_size, 1, 1, 1)
                 distance_batch = distance.repeat(batch_size, 1, 1, 1)
-                scene_images = torch.cat((scene_images.to(self.device), coordinate_batch, distance_batch), dim=1)
+                scene_images = torch.cat(
+                    (scene_images.to(self.device), coordinate_batch, distance_batch), dim=1)
 
             scene_images = scene_images.to(self.device)
 
-            data_format = 'cmu'
+            past_agents_traj = past_agents_traj.to(self.device)
+            past_agents_traj_len = past_agents_traj_len.to(self.device)
+            future_agents_traj = future_agents_traj.to(self.device)[three_mask]
+            future_agents_traj_len = future_agents_traj_len.to(self.device)[
+                three_mask]
 
-            if data_format == 'cmu':
-                past_agents_traj = past_agents_traj.to(self.device)
-                past_agents_traj_len = past_agents_traj_len.to(self.device)
-                future_agents_traj = future_agents_traj.to(self.device)[three_mask]
-                future_agents_traj_len = future_agents_traj_len.to(self.device)[three_mask]
+            num_future_agents = num_future_agents.to(self.device)
+            episode_idx = torch.arange(batch_size, device=self.device).repeat_interleave(num_future_agents)[
+                three_mask]
 
-                num_future_agents = num_future_agents.to(self.device)
-                episode_idx = torch.arange(batch_size, device=self.device).repeat_interleave(num_future_agents)[
-                    three_mask]
+            future_agent_masks = future_agent_masks.to(self.device)
+            agent_tgt_three_mask = torch.zeros_like(future_agent_masks)
+            agent_masks_idx = torch.arange(len(future_agent_masks), device=self.device)[future_agent_masks][
+                three_mask]
+            agent_tgt_three_mask[agent_masks_idx] = True
 
-                future_agent_masks = future_agent_masks.to(self.device)
-                agent_tgt_three_mask = torch.zeros_like(future_agent_masks)
-                agent_masks_idx = torch.arange(len(future_agent_masks), device=self.device)[future_agent_masks][
-                    three_mask]
-                agent_tgt_three_mask[agent_masks_idx] = True
+            future_agent_masks = future_agent_masks.to(self.device)
 
-                future_agent_masks = future_agent_masks.to(self.device)
-
-                decode_start_vel = decode_start_vel.to(self.device)[agent_tgt_three_mask]
-                decode_start_pos = decode_start_pos.to(self.device)[agent_tgt_three_mask]
-            elif data_format == 'custom':
-                mask_comb = future_agent_masks * three_mask
-                mask_comb = mask_comb.to(self.device)
-
-                future_agent_masks = future_agent_masks.to(self.device)
-                agent_tgt_three_mask = torch.zeros_like(future_agent_masks)
-
-                agent_masks_idx = torch.arange(len(future_agent_masks), device=self.device)[mask_comb]
-                agent_tgt_three_mask[agent_masks_idx] = True
-
-                past_agents_traj = past_agents_traj.to(self.device)
-                past_agents_traj_len = past_agents_traj_len.to(self.device)
-
-                future_agents_traj = future_agents_traj.to(self.device)[three_mask]
-                future_agents_traj_len = future_agents_traj_len.to(self.device)[three_mask]
-
-                num_future_agents = num_future_agents.to(self.device)
-                episode_idx = torch.arange(batch_size, device=self.device).repeat_interleave(num_future_agents)[
-                    three_mask]
-
-                future_agent_masks = future_agent_masks.to(self.device)
-
-                decode_start_vel = decode_start_vel.to(self.device)[mask_comb]
-                decode_start_pos = decode_start_pos.to(self.device)[mask_comb]
-                pass
+            decode_start_vel = decode_start_vel.to(
+                self.device)[agent_tgt_three_mask]
+            decode_start_pos = decode_start_pos.to(
+                self.device)[agent_tgt_three_mask]
 
             log_prior = log_prior.to(self.device)
             if self.flow_based_decoder:
@@ -276,8 +258,9 @@ class ModelTrainer:
                 # mu_: A X Td X 2
                 # sigma_: A X Td X 2 X 2
                 # Generate perturbation
-                perterb = torch.normal(mean=0.0, std=np.sqrt(0.001), size=future_agents_traj.shape, device=self.device)
-
+                perterb = torch.normal(mean=0.0, std=np.sqrt(
+                    0.001), size=future_agents_traj.shape, device=self.device)
+                z_, mu_, sigma_, motion_encoding_, scene_encoding_ = None, None, None, None, None
                 if self.model_type == 'R2P2_SimpleRNN':
                     z_, mu_, sigma_, motion_encoding_ = self.model.infer(future_agents_traj + perterb, past_agents_traj,
                                                                          decode_start_vel, decode_start_pos)
@@ -313,7 +296,6 @@ class ModelTrainer:
                                                                                           decode_start_pos,
                                                                                           num_past_agents, scene_images)
 
-
                 elif self.model_type == 'AttGlobal_Scene_CAM_NFDecoder':
                     z_, mu_, sigma_, motion_encoding_, scene_encoding_ = self.model.infer(future_agents_traj + perterb,
                                                                                           past_agents_traj,
@@ -323,16 +305,23 @@ class ModelTrainer:
                                                                                           decode_start_pos,
                                                                                           num_past_agents, scene_images)
 
+                '''
+                z_ : torch.Size([agent_num, 6, 2])
+                mu_ : torch.Size([agent_num, 6, 2])
+                sigma_ : torch.Size([agent_num, 6, 2, 2])
+                motion_encoding_ : torch.Size([agent_num, 128])
+                scene_encoding_ : (torch.Size([3, 6, 100, 100]), torch.Size([3, 1024, 32]))
+                '''
+
                 z_ = z_.reshape((num_three_agents, -1))  # A X (Td*2)
                 log_q0 = c1 - 0.5 * ((z_ ** 2).sum(dim=1))
-
                 logdet_sigma = log_determinant(sigma_)
-
                 log_qpi = log_q0 - logdet_sigma.sum(dim=1)
                 qloss = -log_qpi
                 batch_qloss = qloss.mean()
 
                 # Prior Loss (p loss)
+                gen_trajs, z, mu, sigma = None, None, None, None
                 if self.model_type == 'R2P2_SimpleRNN':
                     gen_trajs, z, mu, sigma = self.model(motion_encoding_, decode_start_vel, decode_start_pos,
                                                          motion_encoded=True)
@@ -368,9 +357,11 @@ class ModelTrainer:
                 if self.beta != 0.0:
                     if self.ploss_type == 'mseloss':
                         # ploss = self.ploss_criterion(gen_trajs, past_agents_traj)
-                        ploss = self.ploss_criterion(gen_trajs, future_agents_traj)
+                        ploss = self.ploss_criterion(
+                            gen_trajs, future_agents_traj)
                     else:
-                        ploss = self.ploss_criterion(episode_idx, gen_trajs, log_prior, -15.0)
+                        ploss = self.ploss_criterion(
+                            episode_idx, gen_trajs, log_prior, -15.0)
 
                 else:
                     ploss = torch.zeros(size=(1,), device=self.device)
@@ -387,7 +378,8 @@ class ModelTrainer:
                     gen_trajs = self.model(past_agents_traj, past_agents_traj_len, agent_tgt_three_mask,
                                            decode_start_vel, decode_start_pos, num_past_agents)
 
-                gen_trajs = gen_trajs.reshape(num_three_agents, self.num_candidates, self.decoding_steps, 2)
+                gen_trajs = gen_trajs.reshape(
+                    num_three_agents, self.num_candidates, self.decoding_steps, 2)
 
             rs_error3 = ((gen_trajs - future_agents_traj.unsqueeze(1)) ** 2).sum(
                 dim=-1).sqrt_()  # A X candi X T X 2 >> A X candi X T
@@ -467,8 +459,10 @@ class ModelTrainer:
         epoch_minfde3 /= epoch_agents3
         epoch_avgfde3 /= epoch_agents3
 
-        epoch_ades = [epoch_minade2, epoch_avgade2, epoch_minade3, epoch_avgade3]
-        epoch_fdes = [epoch_minfde2, epoch_avgfde2, epoch_minfde3, epoch_avgfde3]
+        epoch_ades = [epoch_minade2, epoch_avgade2,
+                      epoch_minade3, epoch_avgade3]
+        epoch_fdes = [epoch_minfde2, epoch_avgfde2,
+                      epoch_minfde3, epoch_avgfde3]
 
         self.optimizer.zero_grad()
         torch.cuda.empty_cache()
@@ -497,7 +491,8 @@ class ModelTrainer:
                 coordinate_std, coordinate_mean = torch.std_mean(coordinate)
                 coordinate = (coordinate - coordinate_mean) / coordinate_std
 
-                distance_2d = coordinate_2d - np.array([(H - 1) / 2, (H - 1) / 2]).reshape((2, 1, 1))
+                distance_2d = coordinate_2d - \
+                    np.array([(H - 1) / 2, (H - 1) / 2]).reshape((2, 1, 1))
                 distance = np.sqrt((distance_2d ** 2).sum(axis=0))
                 distance = torch.FloatTensor(distance)
                 distance = distance.reshape((1, 1, H, W))
@@ -512,12 +507,12 @@ class ModelTrainer:
             for b, batch in enumerate(self.valid_loader):
 
                 scene_images, log_prior, \
-                future_agent_masks, \
-                num_past_agents, past_agents_traj, past_agents_traj_len, past_agents_traj_len_idx, \
-                num_future_agents, future_agents_traj, future_agents_traj_len, future_agents_traj_len_idx, \
-                two_mask, three_mask, \
-                decode_start_vel, decode_start_pos, \
-                scene_id = batch
+                    future_agent_masks, \
+                    num_past_agents, past_agents_traj, past_agents_traj_len, past_agents_traj_len_idx, \
+                    num_future_agents, future_agents_traj, future_agents_traj_len, future_agents_traj_len_idx, \
+                    two_mask, three_mask, \
+                    decode_start_vel, decode_start_pos, \
+                    scene_id = batch
 
                 # Detect dynamic batch size
                 batch_size = scene_images.size(0)
@@ -526,13 +521,16 @@ class ModelTrainer:
                 if self.map_version == '2.0':
                     coordinate_batch = coordinate.repeat(batch_size, 1, 1, 1)
                     distance_batch = distance.repeat(batch_size, 1, 1, 1)
-                    scene_images = torch.cat((scene_images.to(self.device), coordinate_batch, distance_batch), dim=1)
+                    scene_images = torch.cat(
+                        (scene_images.to(self.device), coordinate_batch, distance_batch), dim=1)
 
                 past_agents_traj = past_agents_traj.to(self.device)
                 past_agents_traj_len = past_agents_traj_len.to(self.device)
 
-                future_agents_traj = future_agents_traj.to(self.device)[three_mask]
-                future_agents_traj_len = future_agents_traj_len.to(self.device)[three_mask]
+                future_agents_traj = future_agents_traj.to(self.device)[
+                    three_mask]
+                future_agents_traj_len = future_agents_traj_len.to(self.device)[
+                    three_mask]
 
                 num_future_agents = num_future_agents.to(self.device)
                 episode_idx = torch.arange(batch_size, device=self.device).repeat_interleave(num_future_agents)[
@@ -544,8 +542,10 @@ class ModelTrainer:
                     three_mask]
                 agent_tgt_three_mask[agent_masks_idx] = True
 
-                decode_start_vel = decode_start_vel.to(self.device)[agent_tgt_three_mask]
-                decode_start_pos = decode_start_pos.to(self.device)[agent_tgt_three_mask]
+                decode_start_vel = decode_start_vel.to(
+                    self.device)[agent_tgt_three_mask]
+                decode_start_pos = decode_start_pos.to(
+                    self.device)[agent_tgt_three_mask]
 
                 log_prior = log_prior.to(self.device)
 
@@ -633,9 +633,11 @@ class ModelTrainer:
 
                     if self.beta != 0.0:
                         if self.ploss_type == 'mseloss':
-                            ploss = self.ploss_criterion(gen_trajs, future_agents_traj)
+                            ploss = self.ploss_criterion(
+                                gen_trajs, future_agents_traj)
                         else:
-                            ploss = self.ploss_criterion(episode_idx, gen_trajs, log_prior, -15.0)
+                            ploss = self.ploss_criterion(
+                                episode_idx, gen_trajs, log_prior, -15.0)
 
                     else:
                         ploss = torch.zeros(size=(1,), device=self.device)
@@ -652,9 +654,11 @@ class ModelTrainer:
                         gen_trajs = self.model(past_agents_traj, past_agents_traj_len, agent_tgt_three_mask,
                                                decode_start_vel, decode_start_pos, num_past_agents)
 
-                    gen_trajs = gen_trajs.reshape(num_three_agents, self.num_candidates, self.decoding_steps, 2)
+                    gen_trajs = gen_trajs.reshape(
+                        num_three_agents, self.num_candidates, self.decoding_steps, 2)
 
-                rs_error3 = ((gen_trajs - future_agents_traj.unsqueeze(1)) ** 2).sum(dim=-1).sqrt_()
+                rs_error3 = (
+                    (gen_trajs - future_agents_traj.unsqueeze(1)) ** 2).sum(dim=-1).sqrt_()
                 rs_error2 = rs_error3[..., :int(self.decoding_steps * 2 / 3)]
 
                 num_agents = gen_trajs.size(0)
@@ -732,8 +736,10 @@ class ModelTrainer:
         epoch_minfde3 /= epoch_agents3
         epoch_avgfde3 /= epoch_agents3
 
-        epoch_ades = (epoch_minade2, epoch_avgade2, epoch_minade3, epoch_avgade3)
-        epoch_fdes = (epoch_minfde2, epoch_avgfde2, epoch_minfde3, epoch_avgfde3)
+        epoch_ades = (epoch_minade2, epoch_avgade2,
+                      epoch_minade3, epoch_avgade3)
+        epoch_fdes = (epoch_minfde2, epoch_avgfde2,
+                      epoch_minfde3, epoch_avgfde3)
 
         scheduler_metric = epoch_avgade3 + epoch_avgfde3
 
@@ -791,7 +797,8 @@ class ModelTest:
             self.map_version = '2.0'
 
         if self.model_type in ["R2P2_SimpleRNN", "R2P2_RNN", "CAM_NFDecoder", "Scene_CAM_NFDecoder",
-                               "Global_Scene_CAM_NFDecoder", "AttGlobal_Scene_CAM_NFDecoder"]:
+                               "Global_Scene_CAM_NFDecoder", "AttGlobal_Scene_CAM_NFDecoder",
+                               "Global_Scene_CAM_DSF_NFDecoder", "AttGlobal_Scene_CAM_DSF_NFDecoder"]:
             self.flow_based_decoder = True
             self.num_candidates = args.num_candidates
 
@@ -804,9 +811,12 @@ class ModelTest:
         self.render = args.test_render
         self.test_times = args.test_times
 
-        self.data_dir = os.path.join(args.load_dir, args.version)
+        import hydra
+        # self.data_dir = os.path.join(args.load_dir, args.version)
+        self.data_dir = hydra.utils.to_absolute_path(args.load_dir)
 
-        self.test_ckpt = args.test_ckpt.split('/')[-2] + "_" + args.test_ckpt.split('/')[-1]
+        # self.test_ckpt = args.test_ckpt.split('/')[-2] + "_" + args.test_ckpt.split('/')[-1]
+        self.test_ckpt = args.test_ckpt
         self.test_partition = self.data_dir.split('/')[-1]
 
         # if args.dataset == "argoverse":
@@ -827,8 +837,13 @@ class ModelTest:
         self.load_checkpoint(args.test_ckpt)
 
     def load_checkpoint(self, ckpt):
+<<<<<<< HEAD
         # checkpoint = torch.load(ckpt)
         checkpoint = torch.load(ckpt, map_location='cuda:0')
+=======
+        print('load checkpoint from:', ckpt)
+        checkpoint = torch.load(ckpt)
+>>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
         self.model.load_state_dict(checkpoint['model_state'], strict=False)
 
     def run(self):
@@ -847,8 +862,11 @@ class ModelTest:
         list_dao = []
         list_dac = []
 
+<<<<<<< HEAD
         list_sd =[]
         list_angle = []
+=======
+>>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
         minFSD3 = []
         maxFSD3 = []
         stdFD3 = []
@@ -856,6 +874,11 @@ class ModelTest:
         minFSD3_n = []
         maxFSD3_n = []
 
+<<<<<<< HEAD
+=======
+        miss_or_not = []
+
+>>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
         for test_time in range(self.test_times):
 
             epoch_loss = 0.0
@@ -880,14 +903,18 @@ class ModelTest:
             with torch.no_grad():
                 if self.map_version == '2.0':
                     coordinate_2d = np.indices((H, W))
-                    coordinate = np.ravel_multi_index(coordinate_2d, dims=(H, W))
+                    coordinate = np.ravel_multi_index(
+                        coordinate_2d, dims=(H, W))
                     coordinate = torch.FloatTensor(coordinate)
                     coordinate = coordinate.reshape((1, 1, H, W))
 
-                    coordinate_std, coordinate_mean = torch.std_mean(coordinate)
-                    coordinate = (coordinate - coordinate_mean) / coordinate_std
+                    coordinate_std, coordinate_mean = torch.std_mean(
+                        coordinate)
+                    coordinate = (coordinate - coordinate_mean) / \
+                        coordinate_std
 
-                    distance_2d = coordinate_2d - np.array([(H - 1) / 2, (H - 1) / 2]).reshape((2, 1, 1))
+                    distance_2d = coordinate_2d - \
+                        np.array([(H - 1) / 2, (H - 1) / 2]).reshape((2, 1, 1))
                     distance = np.sqrt((distance_2d ** 2).sum(axis=0))
                     distance = torch.FloatTensor(distance)
                     distance = distance.reshape((1, 1, H, W))
@@ -902,11 +929,11 @@ class ModelTest:
 
                 for b, batch in enumerate(self.data_loader):
                     scene_images, log_prior, \
-                    agent_masks, \
-                    num_src_trajs, src_trajs, src_lens, src_len_idx, \
-                    num_tgt_trajs, tgt_trajs, tgt_lens, tgt_len_idx, \
-                    tgt_two_mask, tgt_three_mask, \
-                    decode_start_vel, decode_start_pos, scene_id = batch
+                        agent_masks, \
+                        num_src_trajs, src_trajs, src_lens, src_len_idx, \
+                        num_tgt_trajs, tgt_trajs, tgt_lens, tgt_len_idx, \
+                        tgt_two_mask, tgt_three_mask, \
+                        decode_start_vel, decode_start_pos, scene_id = batch
 
                     # scene_images[scene_images != 0] = 0
 
@@ -915,7 +942,8 @@ class ModelTest:
                     num_three_agents = torch.sum(tgt_three_mask)
 
                     if self.map_version == '2.0':
-                        coordinate_batch = coordinate.repeat(batch_size, 1, 1, 1)
+                        coordinate_batch = coordinate.repeat(
+                            batch_size, 1, 1, 1)
                         distance_batch = distance.repeat(batch_size, 1, 1, 1)
                         scene_images = torch.cat((scene_images.to(self.device), coordinate_batch, distance_batch),
                                                  dim=1)
@@ -932,11 +960,14 @@ class ModelTest:
 
                     agent_masks = agent_masks.to(self.device)
                     agent_tgt_three_mask = torch.zeros_like(agent_masks)
-                    agent_masks_idx = torch.arange(len(agent_masks), device=self.device)[agent_masks][tgt_three_mask]
+                    agent_masks_idx = torch.arange(len(agent_masks), device=self.device)[
+                        agent_masks][tgt_three_mask]
                     agent_tgt_three_mask[agent_masks_idx] = True
 
-                    decode_start_vel = decode_start_vel.to(self.device)[agent_tgt_three_mask]
-                    decode_start_pos = decode_start_pos.to(self.device)[agent_tgt_three_mask]
+                    decode_start_vel = decode_start_vel.to(
+                        self.device)[agent_tgt_three_mask]
+                    decode_start_pos = decode_start_pos.to(
+                        self.device)[agent_tgt_three_mask]
 
                     log_prior = log_prior.to(self.device)
 
@@ -946,7 +977,8 @@ class ModelTest:
                         # mu: A X Td X 2
                         # sigma: A X Td X 2 X 2
                         # Generate perturbation
-                        perterb = torch.normal(mean=0.0, std=np.sqrt(0.001), size=tgt_trajs.shape, device=self.device)
+                        perterb = torch.normal(mean=0.0, std=np.sqrt(
+                            0.001), size=tgt_trajs.shape, device=self.device)
 
                         if self.model_type == 'R2P2_SimpleRNN':
                             z_, mu_, sigma_, motion_encoding_ = self.model.infer(tgt_trajs + perterb, src_trajs,
@@ -1040,9 +1072,11 @@ class ModelTest:
 
                         if self.beta != 0.0:
                             if self.ploss_type == 'mseloss':
-                                ploss = self.ploss_criterion(gen_trajs, tgt_trajs)
+                                ploss = self.ploss_criterion(
+                                    gen_trajs, tgt_trajs)
                             else:
-                                ploss = self.ploss_criterion(episode_idx, gen_trajs, log_prior, -15.0)
+                                ploss = self.ploss_criterion(
+                                    episode_idx, gen_trajs, log_prior, -15.0)
 
                         else:
                             ploss = torch.zeros(size=(1,), device=self.device)
@@ -1058,10 +1092,13 @@ class ModelTest:
                             gen_trajs = self.model(src_trajs, src_lens, agent_tgt_three_mask, decode_start_vel,
                                                    decode_start_pos, num_src_trajs)
 
-                        gen_trajs = gen_trajs.reshape(num_three_agents, self.num_candidates, self.decoding_steps, 2)
-
-                    rs_error3 = ((gen_trajs - tgt_trajs.unsqueeze(1)) ** 2).sum(dim=-1).sqrt_()
-                    rs_error2 = rs_error3[..., :int(self.decoding_steps * 2 / 3)]
+                        gen_trajs = gen_trajs.reshape(
+                            num_three_agents, self.num_candidates, self.decoding_steps, 2)
+                    # gen_trajs - [agents_num, 6, 6, 2]
+                    rs_error3 = ((gen_trajs - tgt_trajs.unsqueeze(1))
+                                 ** 2).sum(dim=-1).sqrt_()  # [agents_num, 6, 6]
+                    rs_error2 = rs_error3[..., :int(
+                        self.decoding_steps * 2 / 3)]
 
                     diff = gen_trajs - tgt_trajs.unsqueeze(1)
                     msd_error = (diff[:, :, :, 0] ** 2 + diff[:, :, :, 1] ** 2)
@@ -1072,12 +1109,27 @@ class ModelTest:
                     # print(gen_trajs[0][:, 5, :].squeeze())  # final
                     # print(decode_start_pos[0])
 
+<<<<<<< HEAD
+=======
+                    # Miss Rate
+                    rs_error3_max = rs_error3.max(
+                        dim=-1).values  # [agents_num, 6]
+                    for error3_max in rs_error3_max:
+                        # True or False (miss: true)
+                        miss_or_not.append(torch.min(error3_max >= 2.))
+
+>>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
                     def cal_vo_angle(path1, path2):
                         vo_angles_ = []
                         for i in range(1, len(path1)):
                             u = path1[i] - path1[i - 1]
                             v = path2[i] - path2[i - 1]
+<<<<<<< HEAD
                             vo = torch.acos((u * v).sum() / (torch.norm(u) * torch.norm(v)))
+=======
+                            vo = torch.acos(
+                                (u * v).sum() / (torch.norm(u) * torch.norm(v)))
+>>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
                             if torch.isnan(vo):
                                 continue
                             vo_angles_.append(vo)
@@ -1088,14 +1140,24 @@ class ModelTest:
                                                        for i in range(len(paths) - 1)
                                                        for j in range(i + 1, len(paths))])
 
+<<<<<<< HEAD
                         f_points = paths[:, 5, :].squeeze() - decode_start_pos[agent_idx]
+=======
+                        f_points = paths[:, 5, :].squeeze(
+                        ) - decode_start_pos[agent_idx]
+>>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
                         fsds = torch.FloatTensor([torch.norm(f_points[i] - f_points[j])
                                                   for i in range(len(f_points) - 1)
                                                   for j in range(i + 1, len(f_points))])
                         min_fsd = torch.min(fsds)
                         max_fsd = torch.max(fsds)
                         # std_fsd = torch.std(fsds)
+<<<<<<< HEAD
                         std_fd = torch.std(f_points[:, 0]) + torch.std(f_points[:, 1])
+=======
+                        std_fd = torch.std(
+                            f_points[:, 0]) + torch.std(f_points[:, 1])
+>>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
                         vo_angle_mean = torch.mean(vo_angles)
 
                         fsds_n = torch.FloatTensor([torch.norm(f_points[i] - f_points[j])
@@ -1175,11 +1237,14 @@ class ModelTest:
                     epoch_agents2 += num_agents2
                     epoch_agents3 += num_agents3
 
-                    map_files = [self.map_file(sample_idx) for sample_idx in scene_id]
+                    map_files = [self.map_file(sample_idx)
+                                 for sample_idx in scene_id]
                     # output_files = [self.out_dir + '/' + x[2] + '_' + x[3] + '.jpg' for x in scene_id]
 
-                    cum_num_tgt_trajs = [0] + torch.cumsum(num_tgt_trajs, dim=0).tolist()
-                    cum_num_src_trajs = [0] + torch.cumsum(num_src_trajs, dim=0).tolist()
+                    cum_num_tgt_trajs = [
+                        0] + torch.cumsum(num_tgt_trajs, dim=0).tolist()
+                    cum_num_src_trajs = [
+                        0] + torch.cumsum(num_src_trajs, dim=0).tolist()
 
                     src_trajs = src_trajs.cpu().numpy()
                     src_lens = src_lens.cpu().numpy()
@@ -1219,8 +1284,10 @@ class ModelTest:
                         src_traj_i = src_traj_i[agent_tgt_three_mask[cum_num_src_trajs[i]:cum_num_src_trajs[i + 1]]]
                         src_lens_i = src_lens_i[agent_tgt_three_mask[cum_num_src_trajs[i]:cum_num_src_trajs[i + 1]]]
 
-                        dao_i, dao_mask_i = self.dao(candidate_i, map_file_i, img=batch[0][i])
-                        dac_i, dac_mask_i = self.dac(candidate_i, map_file_i, img=batch[0][i])
+                        dao_i, dao_mask_i = self.dao(candidate_i, map_file_i)
+                        dac_i, dac_mask_i = self.dac(candidate_i, map_file_i)
+                        # dao_i, dao_mask_i = self.dao(candidate_i, map_file_i, img=batch[0][i])
+                        # dac_i, dac_mask_i = self.dac(candidate_i, map_file_i, img=batch[0][i])
 
                         epoch_dao += dao_i.sum()
                         dao_agents += dao_mask_i.sum()
@@ -1289,6 +1356,7 @@ class ModelTest:
         test_ades = (test_minade2, test_avgade2, test_minade3, test_avgade3)
         test_fdes = (test_minfde2, test_avgfde2, test_minfde3, test_avgfde3)
 
+<<<<<<< HEAD
         print("--Final Performance Report--")
         print("minADE3: {:.5f}±{:.5f}, minFDE3: {:.5f}±{:.5f}".format(test_minade3[0], test_minade3[1], test_minfde3[0],
                                                                       test_minfde3[1]))
@@ -1296,6 +1364,25 @@ class ModelTest:
                                                                       test_avgfde3[1]))
         print("DAO: {:.5f}±{:.5f}, DAC: {:.5f}±{:.5f}".format(test_dao[0] * 10000.0, test_dao[1] * 10000.0, test_dac[0],
                                                               test_dac[1]))
+=======
+        print("\n--Final Performance Report--")
+        # print("minADE3: {:.5f}±{:.5f}, minFDE3: {:.5f}±{:.5f}".format(
+        #     test_minade3[0], test_minade3[1], test_minfde3[0], test_minfde3[1]))
+        # print("avgADE3: {:.5f}±{:.5f}, avgFDE3: {:.5f}±{:.5f}".format(
+        #     test_avgade3[0], test_avgade3[1], test_avgfde3[0], test_avgfde3[1]))
+        # print("DAO: {:.5f}±{:.5f}, DAC: {:.5f}±{:.5f}".format(
+        #     test_dao[0] * 10000.0, test_dao[1] * 10000.0, test_dac[0], test_dac[1]))
+
+        print("minADE3: {:.5f}".format(test_minade3[0]))
+        print("minFDE3: {:.5f}".format(test_minfde3[0]))
+        print("avgADE3: {:.5f}".format(test_avgade3[0]))
+        print("avgFDE3: {:.5f}".format(test_avgfde3[0]))
+        print("DAO: {:.5f}".format(test_dao[0] * 10000.0))
+        print("DAC: {:.5f}".format(test_dac[0]))
+        print("OffRoad rate: {:.5f}".format(1 - test_dac[0]))
+        RF3 = test_avgfde3[0] / test_minfde3[0]
+        print("RF3: {:.5f}".format(RF3))
+>>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
 
         minFSD3 = torch.FloatTensor(minFSD3)
         maxFSD3 = torch.FloatTensor(maxFSD3)
@@ -1303,12 +1390,41 @@ class ModelTest:
         voAngles = torch.FloatTensor(voAngles)
         minFSD3_n = torch.FloatTensor(minFSD3_n)
         maxFSD3_n = torch.FloatTensor(maxFSD3_n)
+<<<<<<< HEAD
+=======
+        miss_or_not = torch.FloatTensor(miss_or_not)
+>>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
         print("minFSD3_n: {:.5f}".format(minFSD3_n.mean()))
         print("maxFSD3_n: {:.5f}".format(maxFSD3_n.mean()))
         print("minFSD3: {:.5f}".format(minFSD3.mean()))
         print("maxFSD3: {:.5f}".format(maxFSD3.mean()))
         print("stdFD3: {:.5f}".format(stdFD3.mean()))
         print("voAngles: {:.5f}".format(voAngles.mean()))
+<<<<<<< HEAD
+=======
+        print("miss rate: {:.5f}".format(miss_or_not.mean()))
+
+        results_data = {
+            'minADE3': list_minade3,
+            'minFDE3': list_minfde3,
+            'avgADE3': list_avgade3,
+            'avgFDE3': list_avgfde3,
+            'DAO': list_dao,
+            'DAC': list_dac,
+            'RF3': RF3,
+
+            'minFSD3_n': minFSD3_n.cpu().numpy(),
+            'maxFSD3_n': maxFSD3_n.cpu().numpy(),
+            'minFSD3': minFSD3.cpu().numpy(),
+            'maxFSD3': maxFSD3.cpu().numpy(),
+            'stdFD3': stdFD3.cpu().numpy(),
+            'voAngles': voAngles.cpu().numpy(),
+            'miss_rate': miss_or_not.cpu().numpy()
+        }
+
+        with open('results.pkl', 'wb') as f:
+            pkl.dump(results_data, f)
+>>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
 
         plt.figure(figsize=(36, 4))
         plt.subplot(1, 4, 1)
@@ -1337,11 +1453,15 @@ class ModelTest:
 
         plt.show()
 
+<<<<<<< HEAD
         with open(self.out_dir + '/{}_{}_metric.txt'.format(self.test_ckpt, self.test_partition), 'w') as f:
+=======
+        results_save_path = '{}_{}_metric.txt'.format(
+            self.test_ckpt.split('/')[-2], self.test_ckpt.split('/')[-1].split('.')[0])
+        with open(results_save_path, 'w') as f:
+>>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
             f.write('ADEs: {} \n FDEs: {} \n Qloss: {} \n Ploss: {} \n DAO: {} \n DAC: {}'.format(
                 test_ades, test_fdes, test_qloss, test_ploss, test_dao, test_dac))
-            # pkl.dump('ADEs: {} \n FDEs: {} \n Qloss: {} \n Ploss: {}'.format(
-            #     test_ades, test_fdes, test_qloss, test_ploss), f)
 
     @staticmethod
     def q10testsingle(model, batch, device):
@@ -1358,7 +1478,8 @@ class ModelTest:
             coordinate_std, coordinate_mean = torch.std_mean(coordinate)
             coordinate = (coordinate - coordinate_mean) / coordinate_std
 
-            distance_2d = coordinate_2d - np.array([(H - 1) / 2, (H - 1) / 2]).reshape((2, 1, 1))
+            distance_2d = coordinate_2d - \
+                np.array([(H - 1) / 2, (H - 1) / 2]).reshape((2, 1, 1))
             distance = np.sqrt((distance_2d ** 2).sum(axis=0))
             distance = torch.FloatTensor(distance)
             distance = distance.reshape((1, 1, H, W))
@@ -1370,11 +1491,11 @@ class ModelTest:
             distance = distance.to(device)
 
             scene_images, log_prior, \
-            agent_masks, \
-            num_src_trajs, src_trajs, src_lens, src_len_idx, \
-            num_tgt_trajs, tgt_trajs, tgt_lens, tgt_len_idx, \
-            tgt_two_mask, tgt_three_mask, \
-            decode_start_vel, decode_start_pos, scene_id = batch
+                agent_masks, \
+                num_src_trajs, src_trajs, src_lens, src_len_idx, \
+                num_tgt_trajs, tgt_trajs, tgt_lens, tgt_len_idx, \
+                tgt_two_mask, tgt_three_mask, \
+                decode_start_vel, decode_start_pos, scene_id = batch
 
             # Detect dynamic batch size
             batch_size = scene_images.size(0)
@@ -1396,13 +1517,17 @@ class ModelTest:
 
             agent_masks = agent_masks.to(device)
             agent_tgt_three_mask = torch.zeros_like(agent_masks)
-            agent_masks_idx = torch.arange(len(agent_masks), device=device)[agent_masks][tgt_three_mask]
+            agent_masks_idx = torch.arange(len(agent_masks), device=device)[
+                agent_masks][tgt_three_mask]
             agent_tgt_three_mask[agent_masks_idx] = True
 
-            decode_start_vel = decode_start_vel.to(device)[agent_tgt_three_mask]
-            decode_start_pos = decode_start_pos.to(device)[agent_tgt_three_mask]
+            decode_start_vel = decode_start_vel.to(
+                device)[agent_tgt_three_mask]
+            decode_start_pos = decode_start_pos.to(
+                device)[agent_tgt_three_mask]
 
-            perterb = torch.normal(mean=0.0, std=np.sqrt(0.001), size=tgt_trajs.shape, device=device)
+            perterb = torch.normal(mean=0.0, std=np.sqrt(
+                0.001), size=tgt_trajs.shape, device=device)
 
             z_, mu_, sigma_, motion_encoding_, scene_encoding_ = model.infer(tgt_trajs + perterb,
                                                                              src_trajs, src_lens,
@@ -1417,7 +1542,8 @@ class ModelTest:
                                             num_src_trajs, scene_encoding_, agent_encoded=True,
                                             scene_encoded=True)
 
-            rs_error3 = ((gen_trajs - tgt_trajs.unsqueeze(1)) ** 2).sum(dim=-1).sqrt_()
+            rs_error3 = ((gen_trajs - tgt_trajs.unsqueeze(1))
+                         ** 2).sum(dim=-1).sqrt_()
             rs_error2 = rs_error3[..., :int(6 * 2 / 3)]
             diff = gen_trajs - tgt_trajs.unsqueeze(1)
             msd_error = (diff[:, :, :, 0] ** 2 + diff[:, :, :, 1] ** 2)
@@ -1433,8 +1559,8 @@ class ModelTest:
             minfde3, _ = fde3.min(dim=-1)
 
         return gen_trajs.cpu().numpy(), \
-               [z.cpu().numpy(), mu.cpu().numpy(), sigma.cpu().numpy()], \
-               [minade3.cpu().numpy(), minfde3.cpu().numpy()]
+            [z.cpu().numpy(), mu.cpu().numpy(), sigma.cpu().numpy()], \
+            [minade3.cpu().numpy(), minfde3.cpu().numpy()]
 
     @staticmethod
     def dac(gen_trajs, map_file, img=None):
@@ -1453,13 +1579,24 @@ class ModelTest:
                 map_array = np.asarray(map_array)[0]
                 map_array = cv2.resize(map_array, (128, 128))[..., np.newaxis]
             else:
-                with open(map_file, 'rb') as pnt:
-                    map_array = pkl.load(pnt)
-                    map_array = np.asarray(map_array)[0]
-                    map_array = cv2.resize(map_array, (128, 128))[..., np.newaxis]
+                with open(map_file, 'rb') as f:
+                    map_img = pkl.load(f)
+                    drivable_area, road_divider, lane_divider = map_img
+                _, drivable_area = cv2.threshold(
+                    drivable_area, 0, 255, cv2.THRESH_BINARY)
+                _, road_divider = cv2.threshold(
+                    road_divider, 0, 255, cv2.THRESH_BINARY)
+                drivable_area = drivable_area - road_divider
+                map_array = cv2.resize(
+                    drivable_area, (128, 128))[..., np.newaxis]
+            # else:
+            #     with open(map_file, 'rb') as pnt:
+            #         map_array = pkl.load(pnt)
+            #         map_array = np.asarray(map_array)[0]
+            #         map_array = cv2.resize(map_array, (128, 128))[..., np.newaxis]
 
-        # da_mask = np.any(map_array > 0, axis=-1)
-        da_mask = np.any(map_array > np.min(map_array), axis=-1)
+        da_mask = np.any(map_array > 0, axis=-1)
+        # da_mask = np.any(map_array > np.min(map_array), axis=-1)
 
         num_agents, num_candidates, decoding_timesteps = gen_trajs.shape[:3]
         dac = []
@@ -1473,7 +1610,8 @@ class ModelTest:
 
             stay_in_da = [True for i in range(num_agents)]
 
-            oom_mask = np.any(np.logical_or(gen_trajs_k >= 128, gen_trajs_k < 0), axis=-1)
+            oom_mask = np.any(np.logical_or(
+                gen_trajs_k >= 128, gen_trajs_k < 0), axis=-1)
 
             diregard_mask = oom_mask.sum(axis=-1) > 2
             for t in range(decoding_timesteps):
@@ -1527,14 +1665,27 @@ class ModelTest:
                 map_array = copy.deepcopy(img)
                 map_array = np.asarray(map_array)[0]
                 map_array = cv2.resize(map_array, (128, 128))[..., np.newaxis]
-            else:
-                with open(map_file, 'rb') as pnt:
-                    map_array = pkl.load(pnt)
-                    map_array = np.asarray(map_array)[0]
-                    map_array = cv2.resize(map_array, (128, 128))[..., np.newaxis]
 
-        # da_mask = np.any(map_array > 0, axis=-1)
-        da_mask = np.any(map_array > np.min(map_array), axis=-1)
+            else:
+                with open(map_file, 'rb') as f:
+                    map_img = pkl.load(f)
+                    drivable_area, road_divider, lane_divider = map_img
+                _, drivable_area = cv2.threshold(
+                    drivable_area, 0, 255, cv2.THRESH_BINARY)
+                _, road_divider = cv2.threshold(
+                    road_divider, 0, 255, cv2.THRESH_BINARY)
+                drivable_area = drivable_area - road_divider
+                map_array = cv2.resize(
+                    drivable_area, (128, 128))[..., np.newaxis]
+
+            # else:
+            #     with open(map_file, 'rb') as pnt:
+            #         map_array = pkl.load(pnt)
+            #         map_array = np.asarray(map_array)[0]
+            #         map_array = cv2.resize(map_array, (128, 128))[..., np.newaxis]
+
+        da_mask = np.any(map_array > 0, axis=-1)
+        # da_mask = np.any(map_array > np.min(map_array), axis=-1)
 
         num_agents, num_candidates, decoding_timesteps = gen_trajs.shape[:3]
         dao = [0 for i in range(num_agents)]
@@ -1547,7 +1698,8 @@ class ModelTest:
         for k in range(num_candidates):
             gen_trajs_k = gen_trajs[:, k]
 
-            oom_mask = np.any(np.logical_or(gen_trajs_k >= 128, gen_trajs_k < 0), axis=-1)
+            oom_mask = np.any(np.logical_or(
+                gen_trajs_k >= 128, gen_trajs_k < 0), axis=-1)
             diregard_mask = oom_mask.sum(axis=-1) > 2
 
             for t in range(decoding_timesteps):
@@ -1658,6 +1810,7 @@ class ModelTest:
         plt.close(fig)
 
     def map_file(self, scene_id):
+<<<<<<< HEAD
         return '{}/map/{}.bin'.format(self.data_dir, scene_id)
 
     @staticmethod
@@ -1734,3 +1887,7 @@ class ModelTest:
             sd_total+=min_sd
         sd_total /=num_tgt_agents
         return sd_total
+=======
+        return '{}/{}/map.bin'.format(self.data_dir, scene_id)
+        # return '{}/map/{}.bin'.format(self.data_dir, scene_id)
+>>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe

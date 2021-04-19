@@ -152,7 +152,8 @@ class MATF(SocialPooling):
         past_agents_traj = past_agents_traj.permute(1, 0, 2)  # [B X T X D] -> [T X B X D]
         agent_lstm_encodings = self.agent_encoder(past_agents_traj, past_agents_traj_len).squeeze(0) # [B X H]
 
-        discrete_idx = ((decode_start_pos + 56.0) / 112.0 * self.pooling_size).floor().long()
+        # discrete_idx = ((decode_start_pos + 56.0) / 112.0 * self.pooling_size).floor().long()
+        discrete_idx = ((decode_start_pos + 32.0) / 64.0 * self.pooling_size).floor().long()
         discrete_idx = torch.clamp(discrete_idx, 0, self.pooling_size-1)
         x, y = discrete_idx[:, 0], discrete_idx[:, 1]
         encode_coordinates = episode_idx*self.pooling_size*self.pooling_size + y*self.pooling_size + x

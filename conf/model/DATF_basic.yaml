@@ -1,0 +1,96 @@
+# @package _group_
+tag: 'AttGlobal_Scene_CAM_NFDecoder'
+exp_path: 'experiment'
+# SimpleEncDec | SocialPooling | MATF | MATF_GAN | CAM | MACAM | R2P2_RNN | R2P2_SimpleRNN | Desire
+model_type: 'AttGlobal_Scene_CAM_NFDecoder'
+num_workers: 20
+gpu_devices: '0'
+
+flow_based_decoder: True
+
+mode: 'train'  # train | test | viz
+#load_dir: '/home/q10/ws/repos/naverlabs2020/nus_dataset/cmu_dataset'
+load_dir: '/home/user/datasets/cmu_dataset'
+
+# Trajectory Parameters
+sample_stride: 1
+sampling_rate: 2  # Sampling Rate for Encoding/Decoding sequences
+# Hz | 10 frames per sec % sampling_interval=5 => 2 Hz
+
+# Scene Context Parameters
+map_version: '2.0'
+dataset: 'nuscenes'
+# Only used for MATFs
+scene_dropout: 0.5
+scene_encoder: 'ShallowCNN'  # ShallowCNN | ResNet
+freeze_resnet: True
+
+# Agent Encoding
+# (Not used for R2P2 and Desire)
+agent_embed_dim: 128  # Agent Embedding Dimension
+lstm_layers: 1
+lstm_dropout: 0.3
+
+# the number of candidate futures in generative models
+num_candidates: 6  # Number of trajectory candidates sampled
+scene_channels: 3
+
+# CSP Models
+pooling_size: 30  # Map grid H and W dimension
+#pooling_size: 32  # Map grid H and W dimension
+
+# Attention Models
+att_dropout: 0.1
+
+# Normalizing Flow Models
+multi_agent: 1  # Enables multi-agent setting for dataset
+velocity_const: 0.5  # Constant multiplied to dx in verlet integration
+ploss_type: 'map'  # Ploss Type (mseloss | logistic | map)
+
+# GAN Models
+# It first starts with gan weight = 0.1 and when the training epoch reaches 20, gan weight becomes 0.5 and so on.
+noise_dim: 16
+disc_hidden: 512
+disc_dropout: 0.5
+
+# Optimization Parameters
+optimizer: 'adam'
+num_epochs: 100
+batch_size: 4
+learning_rate: 1e-4
+load_ckpt:
+start_epoch: 1  # Resume Model Training
+
+# Model Testing Parameters
+test_partition: 'test_obs' # Data partition to perform test
+test_cache: str
+test_dir: None
+test_times: 1  # Number of test trials to calculate std
+test_render: 1  # Whether to render the outputs as figure
+
+#test_ckpt: '/home/q10/ws/repos/naverlabs2020/labs_hdmap (copy)/experiment/AttGlobal_Scene_CAM_NFDecoder__05_April__05_46_/epoch100.pth.tar'
+#test_ckpt: '/home/q10/ws/repos/naverlabs2020/labs_hdmap (copy)/experiment/SocialPooling__05_April__16_40_/epoch100.pth.tar'
+#test_ckpt: '/home/q10/ws/repos/naverlabs2020/labs_hdmap (copy)/experiment/Desire__05_April__16_42_/epoch100.pth.tar'
+#test_ckpt: '/home/q10/ws/repos/naverlabs2020/labs_hdmap (copy)/experiment/R2P2_RNN__05_April__17_16_/epoch100.pth.tar'
+#test_ckpt: '/home/q10/ws/repos/naverlabs2020/labs_hdmap (copy)/experiment/MATF__06_April__00_59_/epoch100.pth.tar'
+
+test_ckpt: '/home/user/hhhh_test.pth.tar'
+
+version: 'v1.0-trainval'
+data_type: 'real'
+min_angle: -1.
+max_angle: -1.
+#load_dir: '../nus_dataset'
+viz: true
+
+posthoc: false
+posthoc_tune: None  # Post-hoc tunning for dsf network
+post_epochs: None  # Training iteration of post-hoc tunning
+
+lamb: 10.0  # diversity loss
+gamma: 10.0  # map loss
+
+beta: 0.1  # datf: 0.1, datf+dsf: 1.0
+
+test_path: 'experiment/None_None_real_AttGlobal_Scene_CAM_NFDecoder__03_January__03_55_/epoch100.pth.tar'
+pretrained_path: 'experiment/None_None_real_AttGlobal_Scene_CAM_NFDecoder__03_January__03_55_/epoch100.pth.tar'

@@ -350,15 +350,15 @@ class AgentBoxesWithFadedHistory(AgentRepresentation):
                 continue
 
             translation_xy.append(annotation['translation'][:2])
-            past_xy.append(past_xy_temp)
-            future_xy.append(future_xy_temp)
+            past_xy.append(np.flip(past_xy_temp, axis=0).tolist())
+            future_xy.append(future_xy_temp.tolist())
 
             if show_agent:
                 box = get_track_box(annotation, (agent_x, agent_y), central_track_pixels, self.resolution)
                 color = self.color_mapping(annotation['category_name'])
                 cv2.fillPoly(base_image, pts=[np.int0(box)], color=color)
 
-        xy_global = [np.asarray(past_xy), np.asarray(future_xy), np.asarray(translation_xy)]
+        xy_global = [past_xy, future_xy, translation_xy]
 
         center_agent_yaw = quaternion_yaw(Quaternion(rotation))
         rotation_mat = get_rotation_matrix(base_image.shape, center_agent_yaw)
@@ -371,6 +371,86 @@ class AgentBoxesWithFadedHistory(AgentRepresentation):
                                        image_side_length)
 
         return rotated_image[row_crop, col_crop].astype('uint8'), xy_global
+
+    def generate_mask_with_path(self, instance_token: str, sample_token: str, seconds=3, vehicle_only=True):
+        annotation = self.helper.get_sample_annotation(instance_token, sample_token)  # agent annotation
+        ego_pose_xy = annotation['translation']
+        ego_pose_rotation = annotation['rotation']
+
+        buffer = max([self.meters_ahead, self.meters_behind, self.meters_left, self.meters_right]) * 2
+        image_side_length = int(buffer / self.resolution)
+        central_track_pixels = (image_side_length / 2, image_side_length / 2)
+
+        base_image = np.zeros((image_side_length, image_side_length, 3))
+        present_time_annotation = self.helper.get_annotations_for_sample(sample_token)
+
+        instance_tokens = []
+        category_names = []
+        translations = []
+        pasts = []
+        futures = []
+        velocities = []
+        accelerations = []
+        yaw_rates = []
+
+        instance_idx = -1
+
+        for idx, annotation in enumerate(present_time_annotation):
+            if vehicle_only and annotation['category_name'].split('.')[0] != 'vehicle':
+                continue
+            elif annotation['instance_token'] == instance_token:
+                instance_idx = len(instance_tokens)
+
+            past_xy_temp = self.helper.get_past_for_agent(
+                annotation['instance_token'], sample_token, seconds=seconds, in_agent_frame=False)
+            future_xy_temp = self.helper.get_future_for_agent(
+                annotation['instance_token'], sample_token, seconds=seconds, in_agent_frame=False)
+
+            instance_tokens.append(annotation['instance_token'])
+            category_names.append(annotation['category_name'])
+            translations.append(annotation['translation'][:2])
+            pasts.append(np.flip(past_xy_temp, axis=0).tolist())
+            futures.append(future_xy_temp.tolist())
+            velocities.append(self.helper.get_velocity_for_agent(annotation['instance_token'], sample_token))
+            accelerations.append(self.helper.get_acceleration_for_agent(annotation['instance_token'], sample_token))
+            yaw_rates.append(self.helper.get_heading_change_rate_for_agent(annotation['instance_token'], sample_token))
+
+            box = get_track_box(annotation, (ego_pose_xy[0], ego_pose_xy[1]), central_track_pixels, self.resolution)
+            color = self.color_mapping(annotation['category_name'])
+            cv2.fillPoly(base_image, pts=[np.int0(box)], color=color)
+
+        total_agents_annotation = {
+            'instance_tokens': instance_tokens,
+            'category_names': category_names,
+            'translations': translations,
+            'pasts': pasts,
+            'futures': futures,
+            'velocities': velocities,
+            'accelerations': accelerations,
+            'yaw_rates': yaw_rates
+        }
+        agent_annotation = {
+            'category_name': category_names[instance_idx],
+            'translation': translations[instance_idx],
+            'past': pasts[instance_idx],
+            'future': futures[instance_idx],
+            'velocity': velocities[instance_idx],
+            'acceleration': accelerations[instance_idx],
+            'yaw_rate': yaw_rates[instance_idx]
+        }
+
+        center_agent_yaw = quaternion_yaw(Quaternion(ego_pose_rotation))
+        rotation_mat = get_rotation_matrix(base_image.shape, center_agent_yaw)
+
+        rotated_image = cv2.warpAffine(base_image, rotation_mat, (base_image.shape[1],
+                                                                  base_image.shape[0]))
+
+        row_crop, col_crop = get_crops(self.meters_ahead, self.meters_behind,
+                                       self.meters_left, self.meters_right, self.resolution,
+                                       image_side_length)
+        agent_mask = rotated_image[row_crop, col_crop].astype('uint8')
+
+        return agent_mask, total_agents_annotation, agent_annotation
 
     def generate_virtual_mask(self, translation, rotation, lanes, sample_token: str, show_agent=True,
                               past_trj_len=4, future_trj_len=6, min_dist=6):

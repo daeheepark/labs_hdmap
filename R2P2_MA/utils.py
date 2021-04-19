@@ -577,6 +577,7 @@ class ModelTest:
         self.render = args.test_render
         self.test_times = args.test_times
 
+<<<<<<< HEAD
         if args.dataset == "argoverse":
             _data_dir = './data/argoverse'
             self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3] ) + '.png' for x in scene_id]
@@ -588,6 +589,24 @@ class ModelTest:
         elif args.dataset == "carla":
             _data_dir = './data/carla'
             self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3] ) + '.pkl' for x in scene_id]
+=======
+        import hydra
+        # self.data_dir = os.path.join(args.load_dir, args.version)
+        self.data_dir = hydra.utils.to_absolute_path(args.load_dir)
+        self.map_file = lambda scene_ids: ['{}/{}/map.bin'.format(self.data_dir, scene_id) for scene_id in scene_ids]
+
+        # if args.dataset == "argoverse":
+        #     _data_dir = './data/argoverse'
+        #     self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3] ) + '.png' for x in scene_id]
+        #
+        # elif args.dataset == "nuscenes":
+        #     _data_dir = './data/nuscenes_shpark'
+        #     self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3]) + '.pkl' for x in scene_id]
+        #
+        # elif args.dataset == "carla":
+        #     _data_dir = './data/carla'
+        #     self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3] ) + '.pkl' for x in scene_id]
+>>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
 
         self.load_checkpoint(args.test_ckpt)
 
@@ -609,6 +628,15 @@ class ModelTest:
 
         list_dao = []
         list_dac = []
+
+        minFSD3 = []
+        maxFSD3 = []
+        stdFD3 = []
+        voAngles = []
+        minFSD3_n = []
+        maxFSD3_n = []
+
+        miss_or_not = []
 
         for test_time in range(self.test_times):
             epoch_loss = 0.0
@@ -721,6 +749,55 @@ class ModelTest:
     
                     rs_error3 = ((gen_trajs - tgt_trajs.unsqueeze(1)) ** 2).sum(dim=-1).sqrt_()
                     rs_error2 = rs_error3[..., :int(self.decoding_steps*2/3)]
+
+                    # Miss Rate
+                    rs_error3_max = rs_error3.max(dim=-1).values  # [agents_num, 6]
+                    for error3_max in rs_error3_max:
+                        miss_or_not.append(torch.min(error3_max >= 2.))  # True or False (miss: true)
+
+                    def cal_vo_angle(path1, path2):
+                        vo_angles_ = []
+                        for i in range(1, len(path1)):
+                            u = path1[i] - path1[i - 1]
+                            v = path2[i] - path2[i - 1]
+                            vo = torch.acos((u * v).sum() / (torch.norm(u) * torch.norm(v)))
+                            if torch.isnan(vo):
+                                continue
+                            vo_angles_.append(vo)
+                        return torch.FloatTensor(vo_angles_).mean()
+
+                    for agent_idx, paths in enumerate(gen_trajs):
+                        vo_angles = torch.FloatTensor([cal_vo_angle(paths[i], paths[j])
+                                                       for i in range(len(paths) - 1)
+                                                       for j in range(i + 1, len(paths))])
+
+                        f_points = paths[:, 5, :].squeeze() - decode_start_pos[agent_idx]
+                        fsds = torch.FloatTensor([torch.norm(f_points[i] - f_points[j])
+                                                  for i in range(len(f_points) - 1)
+                                                  for j in range(i + 1, len(f_points))])
+                        min_fsd = torch.min(fsds)
+                        max_fsd = torch.max(fsds)
+                        # std_fsd = torch.std(fsds)
+                        std_fd = torch.std(f_points[:, 0]) + torch.std(f_points[:, 1])
+                        vo_angle_mean = torch.mean(vo_angles)
+
+                        fsds_n = torch.FloatTensor([torch.norm(f_points[i] - f_points[j])
+                                                    / (torch.norm(f_points[i]) + torch.norm(f_points[j]))
+                                                    for i in range(len(f_points) - 1)
+                                                    for j in range(i + 1, len(f_points))])
+                        min_fsd_n = torch.min(fsds_n)
+                        max_fsd_n = torch.max(fsds_n)
+                        minFSD3_n.append(min_fsd_n)
+                        maxFSD3_n.append(max_fsd_n)
+
+                        minFSD3.append(min_fsd)
+                        maxFSD3.append(max_fsd)
+                        stdFD3.append(std_fd)
+                        voAngles.append(vo_angle_mean)
+
+
+
+
                     
                     num_agents = gen_trajs.size(0)
                     num_agents2 = rs_error2.size(0)
@@ -853,17 +930,66 @@ class ModelTest:
         test_ades = ( test_minade2, test_avgade2, test_minade3, test_avgade3 )
         test_fdes = ( test_minfde2, test_avgfde2, test_minfde3, test_avgfde3 )
 
+
+        print("\n--Final Performance Report--")
+        print("minADE3: {:.5f}".format(test_minade3[0]))
+        print("minFDE3: {:.5f}".format(test_minfde3[0]))
+        print("avgADE3: {:.5f}".format(test_avgade3[0]))
+        print("avgFDE3: {:.5f}".format(test_avgfde3[0]))
+        print("DAO: {:.5f}".format(test_dao[0] * 10000.0))
+        print("DAC: {:.5f}".format(test_dac[0]))
+        print("OffRoad rate: {:.5f}".format(1 - test_dac[0]))
+        RF3 = test_avgfde3[0] / test_minfde3[0]
+        print("RF3: {:.5f}".format(RF3))
+
+        minFSD3 = torch.FloatTensor(minFSD3)
+        maxFSD3 = torch.FloatTensor(maxFSD3)
+        stdFD3 = torch.FloatTensor(stdFD3)
+        voAngles = torch.FloatTensor(voAngles)
+        minFSD3_n = torch.FloatTensor(minFSD3_n)
+        maxFSD3_n = torch.FloatTensor(maxFSD3_n)
+        miss_or_not = torch.FloatTensor(miss_or_not)
+        print("minFSD3_n: {:.5f}".format(minFSD3_n.mean()))
+        print("maxFSD3_n: {:.5f}".format(maxFSD3_n.mean()))
+        print("minFSD3: {:.5f}".format(minFSD3.mean()))
+        print("maxFSD3: {:.5f}".format(maxFSD3.mean()))
+        print("stdFD3: {:.5f}".format(stdFD3.mean()))
+        print("voAngles: {:.5f}".format(voAngles.mean()))
+        print("miss rate: {:.5f}".format(miss_or_not.mean()))
+
+        results_data = {
+            'minADE3': list_minade3,
+            'minFDE3': list_minfde3,
+            'avgADE3': list_avgade3,
+            'avgFDE3': list_avgfde3,
+            'DAO': list_dao,
+            'DAC': list_dac,
+            'RF3': RF3,
+
+            'minFSD3_n': minFSD3_n.cpu().numpy(),
+            'maxFSD3_n': maxFSD3_n.cpu().numpy(),
+            'minFSD3': minFSD3.cpu().numpy(),
+            'maxFSD3': maxFSD3.cpu().numpy(),
+            'stdFD3': stdFD3.cpu().numpy(),
+            'voAngles': voAngles.cpu().numpy(),
+            'miss_rate': miss_or_not.cpu().numpy()
+        }
+
+        with open('results.pkl', 'wb') as f:
+            pkl.dump(results_data, f)
+
+
         print("--Final Performane Report--")
         print("minADE3: {:.5f}±{:.5f}, minFDE3: {:.5f}±{:.5f}".format(test_minade3[0], test_minade3[1], test_minfde3[0], test_minfde3[1]))
         print("avgADE3: {:.5f}±{:.5f}, avgFDE3: {:.5f}±{:.5f}".format(test_avgade3[0], test_avgade3[1], test_avgfde3[0], test_avgfde3[1]))
         print("DAO: {:.5f}±{:.5f}, DAC: {:.5f}±{:.5f}".format(test_dao[0] * 10000.0, test_dao[1] * 10000.0, test_dac[0], test_dac[1]))
-        with open(self.out_dir + '/metric.pkl', 'wb') as f:
-            pkl.dump({"ADEs": test_ades,
-                      "FDEs": test_fdes,
-                      "Qloss": test_qloss,
-                      "Ploss": test_ploss, 
-                      "DAO": test_dao,
-                      "DAC": test_dac}, f)
+        # with open(self.out_dir + '/metric.pkl', 'wb') as f:
+        #     pkl.dump({"ADEs": test_ades,
+        #               "FDEs": test_fdes,
+        #               "Qloss": test_qloss,
+        #               "Ploss": test_ploss,
+        #               "DAO": test_dao,
+        #               "DAC": test_dac}, f)
 
     @staticmethod
     def dac(gen_trajs, map_file):
@@ -874,12 +1000,21 @@ class ModelTest:
             with open(map_file, 'rb') as pnt:
                 map_array = pkl.load(pnt)
 
+        else:
+            with open(map_file, 'rb') as f:
+                map_img = pkl.load(f)
+                drivable_area, road_divider, lane_divider = map_img
+            _, drivable_area = cv2.threshold(drivable_area, 0, 255, cv2.THRESH_BINARY)
+            _, road_divider = cv2.threshold(road_divider, 0, 255, cv2.THRESH_BINARY)
+            drivable_area = drivable_area - road_divider
+            map_array = cv2.resize(drivable_area, (128, 128))[..., np.newaxis]
+
         da_mask = np.any(map_array > 0, axis=-1)
 
         num_agents, num_candidates, decoding_timesteps = gen_trajs.shape[:3]
         dac = []
 
-        gen_trajs = ((gen_trajs + 56) * 2).astype(np.int64)
+        gen_trajs = ((gen_trajs + 32) * 2).astype(np.int64)
 
         stay_in_da_count = [0 for i in range(num_agents)]
         for k in range(num_candidates):
@@ -887,14 +1022,14 @@ class ModelTest:
 
             stay_in_da = [True for i in range(num_agents)]
 
-            oom_mask = np.any( np.logical_or(gen_trajs_k >= 224, gen_trajs_k < 0), axis=-1 )
+            oom_mask = np.any( np.logical_or(gen_trajs_k >= 128, gen_trajs_k < 0), axis=-1 )
             diregard_mask = oom_mask.sum(axis=-1) > 2
             for t in range(decoding_timesteps):
                 gen_trajs_kt = gen_trajs_k[:, t]
                 oom_mask_t = oom_mask[:, t]
                 x, y = gen_trajs_kt.T
 
-                lin_xy = (x*224+y)
+                lin_xy = (x*128+y)
                 lin_xy[oom_mask_t] = -1
                 for i in range(num_agents):
                     xi, yi = x[i], y[i]
@@ -933,6 +1068,15 @@ class ModelTest:
             with open(map_file, 'rb') as pnt:
                 map_array = pkl.load(pnt)
 
+        else:
+            with open(map_file, 'rb') as f:
+                map_img = pkl.load(f)
+                drivable_area, road_divider, lane_divider = map_img
+            _, drivable_area = cv2.threshold(drivable_area, 0, 255, cv2.THRESH_BINARY)
+            _, road_divider = cv2.threshold(road_divider, 0, 255, cv2.THRESH_BINARY)
+            drivable_area = drivable_area - road_divider
+            map_array = cv2.resize(drivable_area, (128, 128))[..., np.newaxis]
+
         da_mask = np.any(map_array > 0, axis=-1)
 
         num_agents, num_candidates, decoding_timesteps = gen_trajs.shape[:3]
@@ -940,12 +1084,12 @@ class ModelTest:
 
         occupied = [[] for i in range(num_agents)]
 
-        gen_trajs = ((gen_trajs + 56) * 2).astype(np.int64)
+        gen_trajs = ((gen_trajs + 32) * 2).astype(np.int64)
 
         for k in range(num_candidates):
             gen_trajs_k = gen_trajs[:, k]
 
-            oom_mask = np.any( np.logical_or(gen_trajs_k >= 224, gen_trajs_k < 0), axis=-1 )
+            oom_mask = np.any( np.logical_or(gen_trajs_k >= 128, gen_trajs_k < 0), axis=-1 )
             diregard_mask = oom_mask.sum(axis=-1) > 2
 
             for t in range(decoding_timesteps):
@@ -953,7 +1097,7 @@ class ModelTest:
                 oom_mask_t = oom_mask[:, t]
                 x, y = gen_trajs_kt.T
 
-                lin_xy = (x*224+y)
+                lin_xy = (x*128+y)
                 lin_xy[oom_mask_t] = -1
                 for i in range(num_agents):
                     xi, yi = x[i], y[i]
