@@ -52,15 +52,9 @@ class MSE_Ploss(nn.Module):
         if len(tgt_traj.size()) != 3:
             raise ValueError()
 
-<<<<<<< HEAD
-        # ploss = ((pred_traj - tgt_traj.unsqueeze(1)) ** 2).sum((2,3)).mean(1)
-        ploss = torch.min(((pred_traj - tgt_traj.unsqueeze(1)) ** 2).sum((2,3)), dim=1).values
-        
-=======
         ploss = ((pred_traj - tgt_traj.unsqueeze(1)) ** 2).sum((2,3)).mean(1)
         # ploss = torch.min(((pred_traj - tgt_traj.unsqueeze(1)) ** 2).sum((2, 3)), dim=1).values
 
->>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
         return ploss
 
 

@@ -1,5 +1,5 @@
 # @package _group_
-tag: 'AttGlobal_Scene_CAM_NFDecoder'
+tag: '6second'
 exp_path: 'experiment'
 # SimpleEncDec | SocialPooling | MATF | MATF_GAN | CAM | MACAM | R2P2_RNN | R2P2_SimpleRNN | Desire
 model_type: 'AttGlobal_Scene_CAM_NFDecoder'
@@ -13,6 +13,7 @@ mode: 'train'  # train | test | viz
 load_dir: '/home/user/datasets/cmu_dataset'
 
 # Trajectory Parameters
+sampling_time: 6
 sample_stride: 1
 sampling_rate: 2  # Sampling Rate for Encoding/Decoding sequences
 # Hz | 10 frames per sec % sampling_interval=5 => 2 Hz

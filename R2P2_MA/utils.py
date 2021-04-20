@@ -577,19 +577,6 @@ class ModelTest:
         self.render = args.test_render
         self.test_times = args.test_times
 
-<<<<<<< HEAD
-        if args.dataset == "argoverse":
-            _data_dir = './data/argoverse'
-            self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3] ) + '.png' for x in scene_id]
-
-        elif args.dataset == "nuscenes":
-            _data_dir = './data/nuscenes_shpark'
-            self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3]) + '.pkl' for x in scene_id]
-
-        elif args.dataset == "carla":
-            _data_dir = './data/carla'
-            self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3] ) + '.pkl' for x in scene_id]
-=======
         import hydra
         # self.data_dir = os.path.join(args.load_dir, args.version)
         self.data_dir = hydra.utils.to_absolute_path(args.load_dir)
@@ -606,7 +593,6 @@ class ModelTest:
         # elif args.dataset == "carla":
         #     _data_dir = './data/carla'
         #     self.map_file = lambda scene_id: [os.path.join(_data_dir, x[0], x[1], x[2], 'map/v1.3', x[3] ) + '.pkl' for x in scene_id]
->>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
 
         self.load_checkpoint(args.test_ckpt)
 

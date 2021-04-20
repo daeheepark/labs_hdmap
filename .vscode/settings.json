@@ -1,3 +1,4 @@
 {
-    "python.pythonPath": "/home/vilab/anaconda3/envs/datf/bin/python"
+    "python.pythonPath": "/home/vilab/anaconda3/envs/datf/bin/python",
+    "jupyter.debugJustMyCode": false
 }

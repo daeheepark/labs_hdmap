@@ -48,8 +48,8 @@ class NusTrajectoryExtractor:
         self.sampling_time = sampling_time
         self.agent_seconds = agent_time
         self.scene_size = (64, 64)
-        self.past_len = 4
-        self.future_len = 6
+        self.past_len = int(sampling_time * 4/3)
+        self.future_len = int(sampling_time * 2)
 
         self.static_layer = StaticLayerRasterizer(self.helper, layer_names=self.layer_names, colors=self.colors,
                                                   resolution=resolution, meters_ahead=meters_ahead,
@@ -569,7 +569,7 @@ def nuscenes_collate(batch, test_set=False):
     return data
 
 
-@hydra.main(config_path="config")
+@hydra.main(config_path="conf/config.yaml")
 def save_dataset(cfg):
     root = cfg.dataset.dataset_path
     version = cfg.dataset.version

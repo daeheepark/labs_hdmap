@@ -837,13 +837,8 @@ class ModelTest:
         self.load_checkpoint(args.test_ckpt)
 
     def load_checkpoint(self, ckpt):
-<<<<<<< HEAD
-        # checkpoint = torch.load(ckpt)
-        checkpoint = torch.load(ckpt, map_location='cuda:0')
-=======
         print('load checkpoint from:', ckpt)
         checkpoint = torch.load(ckpt)
->>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
         self.model.load_state_dict(checkpoint['model_state'], strict=False)
 
     def run(self):
@@ -862,11 +857,6 @@ class ModelTest:
         list_dao = []
         list_dac = []
 
-<<<<<<< HEAD
-        list_sd =[]
-        list_angle = []
-=======
->>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
         minFSD3 = []
         maxFSD3 = []
         stdFD3 = []
@@ -874,11 +864,8 @@ class ModelTest:
         minFSD3_n = []
         maxFSD3_n = []
 
-<<<<<<< HEAD
-=======
         miss_or_not = []
 
->>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
         for test_time in range(self.test_times):
 
             epoch_loss = 0.0
@@ -1109,8 +1096,6 @@ class ModelTest:
                     # print(gen_trajs[0][:, 5, :].squeeze())  # final
                     # print(decode_start_pos[0])
 
-<<<<<<< HEAD
-=======
                     # Miss Rate
                     rs_error3_max = rs_error3.max(
                         dim=-1).values  # [agents_num, 6]
@@ -1118,18 +1103,13 @@ class ModelTest:
                         # True or False (miss: true)
                         miss_or_not.append(torch.min(error3_max >= 2.))
 
->>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
                     def cal_vo_angle(path1, path2):
                         vo_angles_ = []
                         for i in range(1, len(path1)):
                             u = path1[i] - path1[i - 1]
                             v = path2[i] - path2[i - 1]
-<<<<<<< HEAD
-                            vo = torch.acos((u * v).sum() / (torch.norm(u) * torch.norm(v)))
-=======
                             vo = torch.acos(
                                 (u * v).sum() / (torch.norm(u) * torch.norm(v)))
->>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
                             if torch.isnan(vo):
                                 continue
                             vo_angles_.append(vo)
@@ -1140,24 +1120,16 @@ class ModelTest:
                                                        for i in range(len(paths) - 1)
                                                        for j in range(i + 1, len(paths))])
 
-<<<<<<< HEAD
-                        f_points = paths[:, 5, :].squeeze() - decode_start_pos[agent_idx]
-=======
                         f_points = paths[:, 5, :].squeeze(
                         ) - decode_start_pos[agent_idx]
->>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
                         fsds = torch.FloatTensor([torch.norm(f_points[i] - f_points[j])
                                                   for i in range(len(f_points) - 1)
                                                   for j in range(i + 1, len(f_points))])
                         min_fsd = torch.min(fsds)
                         max_fsd = torch.max(fsds)
                         # std_fsd = torch.std(fsds)
-<<<<<<< HEAD
-                        std_fd = torch.std(f_points[:, 0]) + torch.std(f_points[:, 1])
-=======
                         std_fd = torch.std(
                             f_points[:, 0]) + torch.std(f_points[:, 1])
->>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
                         vo_angle_mean = torch.mean(vo_angles)
 
                         fsds_n = torch.FloatTensor([torch.norm(f_points[i] - f_points[j])
@@ -1356,15 +1328,6 @@ class ModelTest:
         test_ades = (test_minade2, test_avgade2, test_minade3, test_avgade3)
         test_fdes = (test_minfde2, test_avgfde2, test_minfde3, test_avgfde3)
 
-<<<<<<< HEAD
-        print("--Final Performance Report--")
-        print("minADE3: {:.5f}±{:.5f}, minFDE3: {:.5f}±{:.5f}".format(test_minade3[0], test_minade3[1], test_minfde3[0],
-                                                                      test_minfde3[1]))
-        print("avgADE3: {:.5f}±{:.5f}, avgFDE3: {:.5f}±{:.5f}".format(test_avgade3[0], test_avgade3[1], test_avgfde3[0],
-                                                                      test_avgfde3[1]))
-        print("DAO: {:.5f}±{:.5f}, DAC: {:.5f}±{:.5f}".format(test_dao[0] * 10000.0, test_dao[1] * 10000.0, test_dac[0],
-                                                              test_dac[1]))
-=======
         print("\n--Final Performance Report--")
         # print("minADE3: {:.5f}±{:.5f}, minFDE3: {:.5f}±{:.5f}".format(
         #     test_minade3[0], test_minade3[1], test_minfde3[0], test_minfde3[1]))
@@ -1382,7 +1345,6 @@ class ModelTest:
         print("OffRoad rate: {:.5f}".format(1 - test_dac[0]))
         RF3 = test_avgfde3[0] / test_minfde3[0]
         print("RF3: {:.5f}".format(RF3))
->>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
 
         minFSD3 = torch.FloatTensor(minFSD3)
         maxFSD3 = torch.FloatTensor(maxFSD3)
@@ -1390,18 +1352,13 @@ class ModelTest:
         voAngles = torch.FloatTensor(voAngles)
         minFSD3_n = torch.FloatTensor(minFSD3_n)
         maxFSD3_n = torch.FloatTensor(maxFSD3_n)
-<<<<<<< HEAD
-=======
         miss_or_not = torch.FloatTensor(miss_or_not)
->>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
         print("minFSD3_n: {:.5f}".format(minFSD3_n.mean()))
         print("maxFSD3_n: {:.5f}".format(maxFSD3_n.mean()))
         print("minFSD3: {:.5f}".format(minFSD3.mean()))
         print("maxFSD3: {:.5f}".format(maxFSD3.mean()))
         print("stdFD3: {:.5f}".format(stdFD3.mean()))
         print("voAngles: {:.5f}".format(voAngles.mean()))
-<<<<<<< HEAD
-=======
         print("miss rate: {:.5f}".format(miss_or_not.mean()))
 
         results_data = {
@@ -1424,7 +1381,6 @@ class ModelTest:
 
         with open('results.pkl', 'wb') as f:
             pkl.dump(results_data, f)
->>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
 
         plt.figure(figsize=(36, 4))
         plt.subplot(1, 4, 1)
@@ -1453,13 +1409,9 @@ class ModelTest:
 
         plt.show()
 
-<<<<<<< HEAD
-        with open(self.out_dir + '/{}_{}_metric.txt'.format(self.test_ckpt, self.test_partition), 'w') as f:
-=======
         results_save_path = '{}_{}_metric.txt'.format(
             self.test_ckpt.split('/')[-2], self.test_ckpt.split('/')[-1].split('.')[0])
         with open(results_save_path, 'w') as f:
->>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
             f.write('ADEs: {} \n FDEs: {} \n Qloss: {} \n Ploss: {} \n DAO: {} \n DAC: {}'.format(
                 test_ades, test_fdes, test_qloss, test_ploss, test_dao, test_dac))
 
@@ -1810,84 +1762,5 @@ class ModelTest:
         plt.close(fig)
 
     def map_file(self, scene_id):
-<<<<<<< HEAD
-        return '{}/map/{}.bin'.format(self.data_dir, scene_id)
-
-    @staticmethod
-    def vo_angle(gen_trajs, tgt_trajs, tgt_lens):
-        def angle_between(v1, v2):
-            v1 = v1+1e-6
-            v2 = v2+1e-6
-            v1_u = v1 / (np.linalg.norm(v1))
-            v2_u = v2 / (np.linalg.norm(v2))
-            return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
-        num_tgt_agents, num_candidates = gen_trajs.shape[:2]
-        angle_sum = 0
-
-        for k in range(num_candidates):
-            gen_trajs_k = gen_trajs[:, k]
-            for i in range(num_tgt_agents):
-                gen_traj_ki = gen_trajs_k[i]
-                tgt_traj_i = tgt_trajs[i]
-                tgt_len_i = tgt_lens[i]
-
-                gen_init_x = gen_traj_ki[:tgt_len_i-1, 0]
-                gen_init_y = gen_traj_ki[:tgt_len_i-1, 1]
-                gen_fin_x = gen_traj_ki[1:tgt_len_i, 0]
-                gen_fin_y = gen_traj_ki[1:tgt_len_i, 1]
-
-                tgt_init_x = tgt_traj_i[:tgt_len_i-1, 0]
-                tgt_init_y = tgt_traj_i[:tgt_len_i-1, 1]
-                tgt_fin_x = tgt_traj_i[1:tgt_len_i, 0]
-                tgt_fin_y = tgt_traj_i[1:tgt_len_i, 1]
-
-                gen_to_tgt_x = tgt_init_x - gen_init_x
-                gen_to_tgt_y = tgt_init_y - gen_init_y
-
-                gen_fin_x = gen_fin_x + gen_to_tgt_x
-                gen_fin_y = gen_fin_y + gen_to_tgt_y
-
-                tgt_vector_x = tgt_fin_x - tgt_init_x
-                tgt_vector_y = tgt_fin_y - tgt_init_y
-                gen_vector_x = gen_fin_x - tgt_init_x
-                gen_vector_y = gen_fin_y - tgt_init_y
-
-                tgt_vectors = (np.concatenate((tgt_vector_x, tgt_vector_y), axis= 0)).T
-                gen_vectors = (np.concatenate((gen_vector_x, gen_vector_y), axis= 0)).T
-                
-                for tgt_vec, gen_vec in zip(tgt_vectors, gen_vectors):
-                    angle_sum += angle_between(tgt_vec, gen_vec)
-        angle_sum = angle_sum/num_candidates/num_tgt_agents
-        return angle_sum
-    
-    def distance_between(point1, point2):
-        return np.sqrt((point1[0] - point2[0])**2 + (point1[1] - point2[1])**2)
-
-    @staticmethod
-    def self_distance(gen_trajs, tgt_trajs, tgt_lens):
-        num_tgt_agents, num_candidates = gen_trajs.shape[:2]
-        multi_fin = np.zeros((num_tgt_agents, num_candidates, 2))
-
-        for k in range(num_candidates):
-            gen_trajs_k = gen_trajs[:, k]
-            for i in range(num_tgt_agents):
-                gen_traj_ki = gen_trajs_k[i]
-                tgt_len_i = tgt_lens[i]
-                multi_fin[i,k] = gen_traj_ki[tgt_len_i-1]
-        
-        sd_total = 0
-        min_sd = 10000000
-        for i in range(num_tgt_agents):
-            curr_agent = multi_fin[i]
-            for k in range(num_candidates-1):
-                curr_candidate = np.tile(curr_agent[k], (num_candidates-k-1, 1))
-                sd = np.min(np.sqrt(np.sum(np.power(curr_candidate - curr_agent[k+1:], 2), axis=1)))
-                if min_sd>sd:
-                    min_sd = sd
-            sd_total+=min_sd
-        sd_total /=num_tgt_agents
-        return sd_total
-=======
         return '{}/{}/map.bin'.format(self.data_dir, scene_id)
         # return '{}/map/{}.bin'.format(self.data_dir, scene_id)
->>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe

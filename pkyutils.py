@@ -372,19 +372,10 @@ class DatasetQ10(torch.utils.data.dataset.Dataset):
         n = len(os.listdir(os.path.join(self.data_dir, 'map')))
         
         self.ids = np.arange(n)
-<<<<<<< HEAD
-        # if data_partition == 'train':
-        #     self.ids = self.ids[: int(n * (1 - val_ratio))]
-        # elif data_partition == 'val':
-        #     self.ids = self.ids[: int(n * val_ratio)]
-        # elif data_partition == 'all':
-        #     pass
-=======
         if data_partition == 'train':
             self.ids = self.ids[: int(n * (1 - val_ratio))]
         elif data_partition == 'val':
             self.ids = self.ids[int(n * val_ratio):]
->>>>>>> a28fcd4e2277f6d371217114df78af330b1d8abe
 
         if shuffle:
             np.random.shuffle(self.ids)

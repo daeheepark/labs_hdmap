@@ -1,7 +1,7 @@
 # @package _group_
-dataset_path: '/datasets/nuscene/v1.0-trainval_meta'
+dataset_path: '/home/vilab/jegyeong/datasets/nus_dataset/original_small/v1.0-trainval'
 version: 'v1.0-trainval'
-sampling_time: 3
+sampling_time: 6
 agent_time: 0
 resolution: 0.1
 meters_ahead: 32
@@ -9,4 +9,4 @@ meters_behind: 32
 meters_left: 32
 meters_right: 32
 # load_dir: '/home/q10/ws/repos/naverlabs2020/nus_dataset/cmu_dataset'
-load_dir: '/home/user/datasets/cmu_dataset'
+load_dir: '/home/vilab/jegyeong/datasets/nus_dataset/cmu_dataset_6sec(1)'
