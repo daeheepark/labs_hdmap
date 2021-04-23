@@ -214,7 +214,7 @@ class ModelTrainer:
                 num_future_agents, future_agents_traj, future_agents_traj_len, future_agents_traj_len_idx, \
                 two_mask, three_mask, \
                 decode_start_vel, decode_start_pos, \
-                scene_id = batch
+                scene_id, predict_mask, instance_tokens = batch
 
             # Detect dynamic sizes
             batch_size = scene_images.size(0)
@@ -304,7 +304,12 @@ class ModelTrainer:
                                                                                           episode_idx, decode_start_vel,
                                                                                           decode_start_pos,
                                                                                           num_past_agents, scene_images)
-
+                # if test, then future_challenge_mask = predict_mask[future_agent_masks]
+                # print(future_agent_masks.sum().item(), future_agent_masks.shape[0])
+                # if not predict_mask[future_agent_masks].sum().item() == predict_mask.sum().item() == future_agent_masks.sum().item() == future_agent_masks[predict_mask].sum().item(): 
+                #     print((predict_mask.sum().item(), future_agent_masks.sum().item()))
+                # else:
+                #     print('same')
                 '''
                 z_ : torch.Size([agent_num, 6, 2])
                 mu_ : torch.Size([agent_num, 6, 2])
@@ -512,7 +517,7 @@ class ModelTrainer:
                     num_future_agents, future_agents_traj, future_agents_traj_len, future_agents_traj_len_idx, \
                     two_mask, three_mask, \
                     decode_start_vel, decode_start_pos, \
-                    scene_id = batch
+                    scene_id, predict_mask, instance_tokens = batch
 
                 # Detect dynamic batch size
                 batch_size = scene_images.size(0)
@@ -788,8 +793,9 @@ class ModelTest:
 
         self.beta = args.beta
         self.num_candidates = args.num_candidates
-        self.decoding_steps = int(3 * args.sampling_rate)
+        self.decoding_steps = int(args.sampling_time * args.sampling_rate)
         self.model_type = args.model_type
+        self.k_to_report = args.k_to_report
 
         if self.model_type in ['R2P2_SimpleRNN', 'CAM', 'CAM_NFDecoder']:
             self.map_version = None
@@ -848,35 +854,42 @@ class ModelTest:
         list_loss = []
         list_qloss = []
         list_ploss = []
-        list_minade2, list_avgade2 = [], []
-        list_minfde2, list_avgfde2 = [], []
         list_minade3, list_avgade3 = [], []
         list_minfde3, list_avgfde3 = [], []
+        list_minade6, list_avgade6 = [], []
+        list_minfde6, list_avgfde6 = [], []
         list_minmsd, list_avgmsd = [], []
 
         list_dao = []
         list_dac = []
 
-        minFSD3 = []
-        maxFSD3 = []
-        stdFD3 = []
+        minFSD6 = []
+        maxFSD6 = []
+        stdFD6 = []
         voAngles = []
-        minFSD3_n = []
-        maxFSD3_n = []
+        minFSD6_n = []
+        maxFSD6_n = []
 
         miss_or_not = []
+
+        #challenge
+        list_minade6_5, list_minade6_10, list_mr6_5, list_mr6_10, list_fde6_1, list_offroadrate = [], [], [], [], [], []
 
         for test_time in range(self.test_times):
 
             epoch_loss = 0.0
             epoch_qloss = 0.0
             epoch_ploss = 0.0
-            epoch_minade2, epoch_avgade2 = 0.0, 0.0
-            epoch_minfde2, epoch_avgfde2 = 0.0, 0.0
-            epoch_minade3, epoch_avgade3 = 0.0, 0.0
-            epoch_minfde3, epoch_avgfde3 = 0.0, 0.0
+            # epoch_minade3, epoch_avgade3 = 0.0, 0.0
+            # epoch_minfde3, epoch_avgfde3 = 0.0, 0.0
+            # epoch_minade6, epoch_avgade6 = 0.0, 0.0
+            # epoch_minfde6, epoch_avgfde6 = 0.0, 0.0
+            epoch_minade3, epoch_avgade3 = np.zeros(len(self.k_to_report)), np.zeros(len(self.k_to_report))
+            epoch_minfde3, epoch_avgfde3 = np.zeros(len(self.k_to_report)), np.zeros(len(self.k_to_report))
+            epoch_minade6, epoch_avgade6 = np.zeros(len(self.k_to_report)), np.zeros(len(self.k_to_report))
+            epoch_minfde6, epoch_avgfde6 = np.zeros(len(self.k_to_report)), np.zeros(len(self.k_to_report))
             epoch_minmsd, epoch_avgmsd = 0.0, 0.0
-            epoch_agents, epoch_agents2, epoch_agents3 = 0.0, 0.0, 0.0
+            epoch_agents, epoch_agents3, epoch_agents6 = 0.0, 0.0, 0.0
 
             epoch_dao = 0.0
             epoch_dac = 0.0
@@ -920,7 +933,7 @@ class ModelTest:
                         num_src_trajs, src_trajs, src_lens, src_len_idx, \
                         num_tgt_trajs, tgt_trajs, tgt_lens, tgt_len_idx, \
                         tgt_two_mask, tgt_three_mask, \
-                        decode_start_vel, decode_start_pos, scene_id = batch
+                        decode_start_vel, decode_start_pos, scene_id, predict_mask, instance_tokens = batch
 
                     # scene_images[scene_images != 0] = 0
 
@@ -1082,10 +1095,10 @@ class ModelTest:
                         gen_trajs = gen_trajs.reshape(
                             num_three_agents, self.num_candidates, self.decoding_steps, 2)
                     # gen_trajs - [agents_num, 6, 6, 2]
-                    rs_error3 = ((gen_trajs - tgt_trajs.unsqueeze(1))
+                    rs_error6 = ((gen_trajs - tgt_trajs.unsqueeze(1))
                                  ** 2).sum(dim=-1).sqrt_()  # [agents_num, 6, 6]
-                    rs_error2 = rs_error3[..., :int(
-                        self.decoding_steps * 2 / 3)]
+                    rs_error3 = rs_error6[..., :int(
+                        self.decoding_steps / 2)]
 
                     diff = gen_trajs - tgt_trajs.unsqueeze(1)
                     msd_error = (diff[:, :, :, 0] ** 2 + diff[:, :, :, 1] ** 2)
@@ -1097,11 +1110,21 @@ class ModelTest:
                     # print(decode_start_pos[0])
 
                     # Miss Rate
-                    rs_error3_max = rs_error3.max(
-                        dim=-1).values  # [agents_num, 6]
-                    for error3_max in rs_error3_max:
+                    rs_error6_max = rs_error6.max(dim=-1).values  # [agents_num, 6]
+                    for error6_max in rs_error6_max:
                         # True or False (miss: true)
-                        miss_or_not.append(torch.min(error3_max >= 2.))
+                        miss_or_not.append(torch.min(error6_max >= 2.))
+
+                    rs_error6_max = []
+                    for k in self.k_to_report:
+                        rs_error6_max.append(rs_error6[:,:k,:].max(dim=-1).values)
+
+                    for i, rs_error6_k in enumerate(rs_error6_max):
+                        for error6_max in rs_error6_k:
+                            if i == 1:
+                                list_mr6_5.append(torch.min(error6_max >= 2.))
+                            elif i == 2:
+                                list_mr6_10.append(torch.min(error6_max >= 2.))
 
                     def cal_vo_angle(path1, path2):
                         vo_angles_ = []
@@ -1119,8 +1142,8 @@ class ModelTest:
                         vo_angles = torch.FloatTensor([cal_vo_angle(paths[i], paths[j])
                                                        for i in range(len(paths) - 1)
                                                        for j in range(i + 1, len(paths))])
-
-                        f_points = paths[:, 5, :].squeeze(
+                        # TODO: index 5 -> 11
+                        f_points = paths[:, 11, :].squeeze(
                         ) - decode_start_pos[agent_idx]
                         fsds = torch.FloatTensor([torch.norm(f_points[i] - f_points[j])
                                                   for i in range(len(f_points) - 1)
@@ -1138,33 +1161,55 @@ class ModelTest:
                                                     for j in range(i + 1, len(f_points))])
                         min_fsd_n = torch.min(fsds_n)
                         max_fsd_n = torch.max(fsds_n)
-                        minFSD3_n.append(min_fsd_n)
-                        maxFSD3_n.append(max_fsd_n)
+                        minFSD6_n.append(min_fsd_n)
+                        maxFSD6_n.append(max_fsd_n)
 
-                        minFSD3.append(min_fsd)
-                        maxFSD3.append(max_fsd)
-                        stdFD3.append(std_fd)
+                        minFSD6.append(min_fsd)
+                        maxFSD6.append(max_fsd)
+                        stdFD6.append(std_fd)
                         voAngles.append(vo_angle_mean)
 
                     num_agents = gen_trajs.size(0)
-                    num_agents2 = rs_error2.size(0)
                     num_agents3 = rs_error3.size(0)
+                    num_agents6 = rs_error6.size(0)
+                    
+                    minade3, avgade3, minfde3, avgfde3 = torch.Tensor(), torch.Tensor(), torch.Tensor(), torch.Tensor()
+                    for k in self.k_to_report:
+                        ade3 = rs_error3[:,:k,:].mean(-1)
+                        minade, _ = ade3.min(dim=-1)
+                        avgade = ade3.mean(dim=-1)
+                        fde3 = rs_error3[:,:k,-1]
+                        minfde, _ = fde3.min(dim=-1)
+                        avgfde = fde3.mean(dim=-1)
 
-                    ade2 = rs_error2.mean(-1)
-                    fde2 = rs_error2[..., -1]
+                        minade3 = torch.cat((minade3,minade.unsqueeze(0).cpu()), dim=0)
+                        avgade3 = torch.cat((avgade3,avgade.unsqueeze(0).cpu()), dim=0)
+                        minfde3 = torch.cat((minfde3,minfde.unsqueeze(0).cpu()), dim=0)
+                        avgfde3 = torch.cat((avgfde3,avgfde.unsqueeze(0).cpu()), dim=0)
 
-                    minade2, _ = ade2.min(dim=-1)
-                    avgade2 = ade2.mean(dim=-1)
-                    minfde2, _ = fde2.min(dim=-1)
-                    avgfde2 = fde2.mean(dim=-1)
+                    batch_minade3 = minade3.mean(dim=-1)
+                    batch_minfde3 = minfde3.mean(dim=-1)
+                    batch_avgade3 = avgade3.mean(dim=-1)
+                    batch_avgfde3 = avgfde3.mean(dim=-1)
 
-                    batch_minade2 = minade2.mean()
-                    batch_minfde2 = minfde2.mean()
-                    batch_avgade2 = avgade2.mean()
-                    batch_avgfde2 = avgfde2.mean()
+                    minade6, avgade6, minfde6, avgfde6 = torch.Tensor(), torch.Tensor(), torch.Tensor(), torch.Tensor()
+                    for k in self.k_to_report:
+                        ade6 = rs_error6[:,:k,:].mean(-1)
+                        minade, _ = ade6.min(dim=-1)
+                        avgade = ade6.mean(dim=-1)
+                        fde6 = rs_error6[:,:k,-1]
+                        minfde, _ = fde6.min(dim=-1)
+                        avgfde = fde6.mean(dim=-1)
 
-                    ade3 = rs_error3.mean(-1)
-                    fde3 = rs_error3[..., -1]
+                        minade6 = torch.cat((minade6,minade.unsqueeze(0).cpu()), dim=0)
+                        avgade6 = torch.cat((avgade6,avgade.unsqueeze(0).cpu()), dim=0)
+                        minfde6 = torch.cat((minfde6,minfde.unsqueeze(0).cpu()), dim=0)
+                        avgfde6 = torch.cat((avgfde6,avgfde.unsqueeze(0).cpu()), dim=0)
+
+                    batch_minade6 = minade6.mean(dim=-1)
+                    batch_minfde6 = minfde6.mean(dim=-1)
+                    batch_avgade6 = avgade6.mean(dim=-1)
+                    batch_avgfde6 = avgfde6.mean(dim=-1)
 
                     msd = msd_error.mean(-1)
                     minmsd, _ = msd.min(dim=-1)
@@ -1172,18 +1217,8 @@ class ModelTest:
                     batch_minmsd = minmsd.mean()
                     batch_avgmsd = avgmsd.mean()
 
-                    minade3, _ = ade3.min(dim=-1)
-                    avgade3 = ade3.mean(dim=-1)
-                    minfde3, _ = fde3.min(dim=-1)
-                    avgfde3 = fde3.mean(dim=-1)
-
-                    batch_minade3 = minade3.mean()
-                    batch_minfde3 = minfde3.mean()
-                    batch_avgade3 = avgade3.mean()
-                    batch_avgfde3 = avgfde3.mean()
-
                     if self.flow_based_decoder is not True:
-                        batch_loss = batch_minade3
+                        batch_loss = batch_minade6
                         epoch_loss += batch_loss.item()
                         batch_qloss = torch.zeros(1)
                         batch_ploss = torch.zeros(1)
@@ -1193,21 +1228,30 @@ class ModelTest:
 
                     epoch_ploss += batch_ploss.item() * batch_size
                     epoch_qloss += batch_qloss.item() * batch_size
-                    epoch_minade2 += batch_minade2.item() * num_agents2
-                    epoch_avgade2 += batch_avgade2.item() * num_agents2
-                    epoch_minfde2 += batch_minfde2.item() * num_agents2
-                    epoch_avgfde2 += batch_avgfde2.item() * num_agents2
-                    epoch_minade3 += batch_minade3.item() * num_agents3
-                    epoch_avgade3 += batch_avgade3.item() * num_agents3
-                    epoch_minfde3 += batch_minfde3.item() * num_agents3
-                    epoch_avgfde3 += batch_avgfde3.item() * num_agents3
+                    # epoch_minade3 += batch_minade3.item() * num_agents3
+                    # epoch_avgade3 += batch_avgade3.item() * num_agents3
+                    # epoch_minfde3 += batch_minfde3.item() * num_agents3
+                    # epoch_avgfde3 += batch_avgfde3.item() * num_agents3
+                    # epoch_minade6 += batch_minade6.item() * num_agents6
+                    # epoch_avgade6 += batch_avgade6.item() * num_agents6
+                    # epoch_minfde6 += batch_minfde6.item() * num_agents6
+                    # epoch_avgfde6 += batch_avgfde6.item() * num_agents6
+                    for i, k in enumerate(self.k_to_report):
+                        epoch_minade3[i] += batch_minade3[i].item() * num_agents3
+                        epoch_avgade3[i] += batch_avgade3[i].item() * num_agents3
+                        epoch_minfde3[i] += batch_minfde3[i].item() * num_agents3
+                        epoch_avgfde3[i] += batch_avgfde3[i].item() * num_agents3
+                        epoch_minade6[i] += batch_minade6[i].item() * num_agents6
+                        epoch_avgade6[i] += batch_avgade6[i].item() * num_agents6
+                        epoch_minfde6[i] += batch_minfde6[i].item() * num_agents6
+                        epoch_avgfde6[i] += batch_avgfde6[i].item() * num_agents6
 
                     epoch_minmsd += batch_minmsd.item() * num_agents3
                     epoch_avgmsd += batch_avgmsd.item() * num_agents3
 
                     epoch_agents += num_agents
-                    epoch_agents2 += num_agents2
                     epoch_agents3 += num_agents3
+                    epoch_agents6 += num_agents6
 
                     map_files = [self.map_file(sample_idx)
                                  for sample_idx in scene_id]
@@ -1267,8 +1311,8 @@ class ModelTest:
                         epoch_dac += dac_i.sum()
                         dac_agents += dac_mask_i.sum()
 
-                        epoch_min_sd += self.self_distance(candidate_i, tgt_traj_i, tgt_lens_i)
-                        epoch_vo_angle += self.vo_angle(candidate_i, tgt_traj_i, tgt_lens_i)
+                        # epoch_min_sd += self.self_distance(candidate_i, tgt_traj_i, tgt_lens_i)
+                        # epoch_vo_angle += self.vo_angle(candidate_i, tgt_traj_i, tgt_lens_i)
 
             if self.flow_based_decoder:
                 list_ploss.append(epoch_ploss / epoch_agents)
@@ -1278,26 +1322,30 @@ class ModelTest:
             else:
                 list_loss.append(epoch_loss / epoch_agents)
 
-            # 2-Loss
-            list_minade2.append(epoch_minade2 / epoch_agents2)
-            list_avgade2.append(epoch_avgade2 / epoch_agents2)
-            list_minfde2.append(epoch_minfde2 / epoch_agents2)
-            list_avgfde2.append(epoch_avgfde2 / epoch_agents2)
+            # # 2-Loss
+            # list_minade3.append(epoch_minade3 / epoch_agents3)
+            # list_avgade3.append(epoch_avgade3 / epoch_agents3)
+            # list_minfde3.append(epoch_minfde3 / epoch_agents3)
+            # list_avgfde3.append(epoch_avgfde3 / epoch_agents3)
 
-            # 3-Loss
-            list_minade3.append(epoch_minade3 / epoch_agents3)
-            list_avgade3.append(epoch_avgade3 / epoch_agents3)
-            list_minfde3.append(epoch_minfde3 / epoch_agents3)
-            list_avgfde3.append(epoch_avgfde3 / epoch_agents3)
+            # # 3-Loss
+            # list_minade6.append(epoch_minade6 / epoch_agents6)
+            # list_avgade6.append(epoch_avgade6 / epoch_agents6)
+            # list_minfde6.append(epoch_minfde6 / epoch_agents6)
+            # list_avgfde6.append(epoch_avgfde6 / epoch_agents6)
+
+            list_minade6_5.append(epoch_minade6[1] / epoch_agents6)
+            list_minade6_10.append(epoch_minade6[2] / epoch_agents6)
+            # list_mr6_5.append()
+            # list_mr6_10.append()
+            list_fde6_1.append(epoch_minfde6[0] / epoch_agents6)
+            # list_offroadrate.append() -> dac
 
             list_minmsd.append(epoch_minmsd / epoch_agents3)
             list_avgmsd.append(epoch_avgmsd / epoch_agents3)
 
             list_dao.append(epoch_dao / dao_agents)
             list_dac.append(epoch_dac / dac_agents)
-
-            list_sd.append(epoch_min_sd / epoch_agents)
-            list_angle.append(epoch_vo_angle / epoch_agents)
 
         if self.flow_based_decoder:
             test_ploss = [np.mean(list_ploss), np.std(list_ploss)]
@@ -1309,15 +1357,15 @@ class ModelTest:
             test_qloss = [0.0, 0.0]
             test_loss = [np.mean(list_loss), np.std(list_loss)]
 
-        test_minade2 = [np.mean(list_minade2), np.std(list_minade2)]
-        test_avgade2 = [np.mean(list_avgade2), np.std(list_avgade2)]
-        test_minfde2 = [np.mean(list_minfde2), np.std(list_minfde2)]
-        test_avgfde2 = [np.mean(list_avgfde2), np.std(list_avgfde2)]
-
         test_minade3 = [np.mean(list_minade3), np.std(list_minade3)]
         test_avgade3 = [np.mean(list_avgade3), np.std(list_avgade3)]
         test_minfde3 = [np.mean(list_minfde3), np.std(list_minfde3)]
         test_avgfde3 = [np.mean(list_avgfde3), np.std(list_avgfde3)]
+
+        test_minade6 = [np.mean(list_minade6), np.std(list_minade6)]
+        test_avgade6 = [np.mean(list_avgade6), np.std(list_avgade6)]
+        test_minfde6 = [np.mean(list_minfde6), np.std(list_minfde6)]
+        test_avgfde6 = [np.mean(list_avgfde6), np.std(list_avgfde6)]
 
         test_minmsd = [np.mean(list_minmsd), np.std(list_minmsd)]
         test_avgmsd = [np.mean(list_avgmsd), np.std(list_avgmsd)]
@@ -1325,8 +1373,22 @@ class ModelTest:
         test_dao = [np.mean(list_dao), np.std(list_dao)]
         test_dac = [np.mean(list_dac), np.std(list_dac)]
 
-        test_ades = (test_minade2, test_avgade2, test_minade3, test_avgade3)
-        test_fdes = (test_minfde2, test_avgfde2, test_minfde3, test_avgfde3)
+        test_ades = (test_minade3, test_avgade3, test_minade6, test_avgade6)
+        test_fdes = (test_minfde3, test_avgfde3, test_minfde6, test_avgfde6)
+
+        print("\n--Challenge result--")
+        test_minade_5 = [np.mean(list_minade6_5), np.std(list_minade6_5)]
+        test_minade_10 = [np.mean(list_minade6_10), np.std(list_minade6_10)]
+        print("minADE_5: {:.3f}".format(test_minade_5[0]))
+        print("minADE_10: {:.3f}".format(test_minade_10[0]))
+        mr6_5 = torch.FloatTensor(list_mr6_5)
+        mr6_10 = torch.FloatTensor(list_mr6_10)
+        print("MR_2_5: {:.3f}".format(mr6_5.mean()))
+        print("MR_2_10: {:.3f}".format(mr6_10.mean()))
+        test_minfde_1 = [np.mean(list_fde6_1), np.std(list_fde6_1)]
+        print("minFDE_1: {:.3f}".format(test_minfde_1[0]))
+        print("OffRoadRate: {:.3f}".format(1 - test_dac[0]))
+
 
         print("\n--Final Performance Report--")
         # print("minADE3: {:.5f}±{:.5f}, minFDE3: {:.5f}±{:.5f}".format(
@@ -1336,22 +1398,22 @@ class ModelTest:
         # print("DAO: {:.5f}±{:.5f}, DAC: {:.5f}±{:.5f}".format(
         #     test_dao[0] * 10000.0, test_dao[1] * 10000.0, test_dac[0], test_dac[1]))
 
-        print("minADE3: {:.5f}".format(test_minade3[0]))
-        print("minFDE3: {:.5f}".format(test_minfde3[0]))
-        print("avgADE3: {:.5f}".format(test_avgade3[0]))
-        print("avgFDE3: {:.5f}".format(test_avgfde3[0]))
+        print("minADE3: {:.5f}".format(test_minade6[0]))
+        print("minFDE3: {:.5f}".format(test_minfde6[0]))
+        print("avgADE3: {:.5f}".format(test_avgade6[0]))
+        print("avgFDE3: {:.5f}".format(test_avgfde6[0]))
         print("DAO: {:.5f}".format(test_dao[0] * 10000.0))
         print("DAC: {:.5f}".format(test_dac[0]))
         print("OffRoad rate: {:.5f}".format(1 - test_dac[0]))
-        RF3 = test_avgfde3[0] / test_minfde3[0]
+        RF3 = test_avgfde6[0] / test_minfde6[0]
         print("RF3: {:.5f}".format(RF3))
 
-        minFSD3 = torch.FloatTensor(minFSD3)
-        maxFSD3 = torch.FloatTensor(maxFSD3)
-        stdFD3 = torch.FloatTensor(stdFD3)
+        minFSD3 = torch.FloatTensor(minFSD6)
+        maxFSD3 = torch.FloatTensor(maxFSD6)
+        stdFD3 = torch.FloatTensor(stdFD6)
         voAngles = torch.FloatTensor(voAngles)
-        minFSD3_n = torch.FloatTensor(minFSD3_n)
-        maxFSD3_n = torch.FloatTensor(maxFSD3_n)
+        minFSD3_n = torch.FloatTensor(minFSD6_n)
+        maxFSD3_n = torch.FloatTensor(maxFSD6_n)
         miss_or_not = torch.FloatTensor(miss_or_not)
         print("minFSD3_n: {:.5f}".format(minFSD3_n.mean()))
         print("maxFSD3_n: {:.5f}".format(maxFSD3_n.mean()))
@@ -1362,6 +1424,13 @@ class ModelTest:
         print("miss rate: {:.5f}".format(miss_or_not.mean()))
 
         results_data = {
+            'minADE_5': list_minade6_5,
+            'minADE_10': list_minade6_10,
+            'MR_2_5': mr6_5.mean(),
+            'MR_2_10': mr6_10.mean(),
+            'minFDE_1': list_fde6_1,
+            'OffRoadRate': (1 - test_dac[0]),
+
             'minADE3': list_minade3,
             'minFDE3': list_minfde3,
             'avgADE3': list_avgade3,
@@ -1382,38 +1451,38 @@ class ModelTest:
         with open('results.pkl', 'wb') as f:
             pkl.dump(results_data, f)
 
-        plt.figure(figsize=(36, 4))
-        plt.subplot(1, 4, 1)
-        plt.title('minFSD3')
-        plt.hist(minFSD3.view(-1).numpy(), bins=25)
-        plt.xlabel('minFSD3')
-        plt.ylabel('count')
+        # plt.figure(figsize=(36, 4))
+        # plt.subplot(1, 4, 1)
+        # plt.title('minFSD3')
+        # plt.hist(minFSD3.view(-1).numpy(), bins=25)
+        # plt.xlabel('minFSD3')
+        # plt.ylabel('count')
 
-        plt.subplot(1, 4, 2)
-        plt.title('maxFSD3')
-        plt.hist(maxFSD3.view(-1).numpy(), bins=25)
-        plt.xlabel('maxFSD3')
-        plt.ylabel('count')
+        # plt.subplot(1, 4, 2)
+        # plt.title('maxFSD3')
+        # plt.hist(maxFSD3.view(-1).numpy(), bins=25)
+        # plt.xlabel('maxFSD3')
+        # plt.ylabel('count')
 
-        plt.subplot(1, 4, 3)
-        plt.title('stdFD3')
-        plt.hist(stdFD3.view(-1).numpy(), bins=25)
-        plt.xlabel('stdFD3')
-        plt.ylabel('count')
+        # plt.subplot(1, 4, 3)
+        # plt.title('stdFD3')
+        # plt.hist(stdFD3.view(-1).numpy(), bins=25)
+        # plt.xlabel('stdFD3')
+        # plt.ylabel('count')
 
-        plt.subplot(1, 4, 4)
-        plt.title('voAngles')
-        plt.hist(voAngles.view(-1).numpy(), bins=25)
-        plt.xlabel('voAngles')
-        plt.ylabel('count')
+        # plt.subplot(1, 4, 4)
+        # plt.title('voAngles')
+        # plt.hist(voAngles.view(-1).numpy(), bins=25)
+        # plt.xlabel('voAngles')
+        # plt.ylabel('count')
 
-        plt.show()
+        # plt.show()
 
-        results_save_path = '{}_{}_metric.txt'.format(
-            self.test_ckpt.split('/')[-2], self.test_ckpt.split('/')[-1].split('.')[0])
-        with open(results_save_path, 'w') as f:
-            f.write('ADEs: {} \n FDEs: {} \n Qloss: {} \n Ploss: {} \n DAO: {} \n DAC: {}'.format(
-                test_ades, test_fdes, test_qloss, test_ploss, test_dao, test_dac))
+        # results_save_path = '{}_{}_metric.txt'.format(
+        #     self.test_ckpt.split('/')[-2], self.test_ckpt.split('/')[-1].split('.')[0])
+        # with open(results_save_path, 'w') as f:
+        #     f.write('ADEs: {} \n FDEs: {} \n Qloss: {} \n Ploss: {} \n DAO: {} \n DAC: {}'.format(
+        #         test_ades, test_fdes, test_qloss, test_ploss, test_dao, test_dac))
 
     @staticmethod
     def q10testsingle(model, batch, device):

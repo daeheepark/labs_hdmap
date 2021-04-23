@@ -337,7 +337,7 @@ def visualize(cfg, model, test_loader, device):
             with open('{}/episode.bin'.format(sample_dir), 'rb') as f:
                 # episode: past, past_len, future, future_len, agent_mask, vel, pos
                 episode = pickle.load(f)
-                past, past_len, future, future_len, agent_mask, vel, pos = episode
+                past, past_len, future, future_len, agent_mask, vel, pos, _, _ = episode
                 future = [future[i]
                           for i in np.arange(len(agent_mask))[agent_mask]]
                 total_agent_pose = np.array(pos).reshape(-1, 2)
@@ -365,6 +365,7 @@ def visualize(cfg, model, test_loader, device):
                     plt.plot(path[:, 0], path[:, 1], color='r')
 
             plt.savefig(results_dir + '/{}.png'.format(b), dpi=150)
+            print(results_dir + '/{}.png'.format(b))
             plt.pause(0.1)
             plt.cla()
 
@@ -411,7 +412,7 @@ def predict_path(cfg, model, batch, device, scene_size):
         num_src_trajs, src_trajs, src_lens, src_len_idx, \
         num_tgt_trajs, tgt_trajs, tgt_lens, tgt_len_idx, \
         tgt_two_mask, tgt_three_mask, \
-        decode_start_vel, decode_start_pos, scene_tks = batch
+        decode_start_vel, decode_start_pos, scene_tks, predict_mask, instance_tokens = batch
 
     # Detect dynamic batch size
     batch_size = scene_images.size(0)

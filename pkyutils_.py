@@ -163,6 +163,10 @@ class NusTrajectoryExtractor:
         decode_start_vel = []
         decode_start_pos = []
 
+        # For challenge submission
+        predict_mask = []
+        predict_instance_tokens = []
+
         for idx in range(num_agents):
             past = agents_past[idx][-self.past_len + 1:] + [agents_translation[idx]]
             future = agents_future[idx][:self.future_len]
@@ -184,9 +188,16 @@ class NusTrajectoryExtractor:
             decode_start_vel.append(
                 [(past[-1][0] - past[-2][0]) / self.sampling_time, (past[-1][1] - past[-2][1]) / self.sampling_time])
 
+            if agents_annotation['instance_tokens'][idx] in instance_tokens:
+                predict_mask.append(True)
+                predict_instance_tokens.append(agents_annotation['instance_tokens'][idx])
+            else:
+                predict_mask.append(False)
+                predict_instance_tokens.append('')
+
         episode = [past_agents_traj, past_agents_traj_len,
                    future_agents_traj, future_agents_traj_len,
-                   future_agent_masks, decode_start_vel, decode_start_pos]
+                   future_agent_masks, decode_start_vel, decode_start_pos, predict_mask, predict_instance_tokens]
         episode_img = [drivable_area, road_divider, lane_divider]
 
         return {'episode': episode, 'episode_img': episode_img, 'img_show': map_image_show}
@@ -320,7 +331,7 @@ class NusCustomDataset(torch.utils.data.dataset.Dataset):
 
     def __getitem__(self, idx):
         sample_tk = self.sample_tokens[idx]
-        past, past_len, future, future_len, agent_mask, vel, pos = self.episodes[idx]
+        past, past_len, future, future_len, agent_mask, vel, pos, predict_mask, instance_tokens = self.episodes[idx]
         sample_dir = os.path.join(self.load_dir, sample_tk)
         with open('{}/map.bin'.format(sample_dir), 'rb') as f:
             map_img = pickle.load(f)
@@ -344,7 +355,7 @@ class NusCustomDataset(torch.utils.data.dataset.Dataset):
             past, past_len,
             [future[i] for i in np.arange(len(agent_mask))[agent_mask]],
             [future_len[i] for i in np.arange(len(agent_mask))[agent_mask]],
-            agent_mask, vel, pos, image, prior, sample_tk
+            agent_mask, vel, pos, image, prior, sample_tk, predict_mask, instance_tokens
         )
 
         return data
@@ -495,11 +506,11 @@ def nuscenes_collate(batch, test_set=False):
     batch_size = len(batch)
 
     if test_set:
-        past_agents_traj, past_agents_traj_len, future_agent_masks, decode_start_vel, decode_start_pos, map_image, prior, scene_id = list(
+        past_agents_traj, past_agents_traj_len, future_agent_masks, decode_start_vel, decode_start_pos, map_image, prior, scene_id, predict_mask, instance_tokens  = list(
             zip(*batch))
 
     else:
-        past_agents_traj, past_agents_traj_len, future_agents_traj, future_agents_traj_len, future_agent_masks, decode_start_vel, decode_start_pos, map_image, prior, scene_id = list(
+        past_agents_traj, past_agents_traj_len, future_agents_traj, future_agents_traj_len, future_agent_masks, decode_start_vel, decode_start_pos, map_image, prior, scene_id, predict_mask, instance_tokens = list(
             zip(*batch))
 
         # Future agent trajectory
@@ -556,6 +567,9 @@ def nuscenes_collate(batch, test_set=False):
 
     scene_id = np.array(scene_id)
 
+    predict_mask = torch.BoolTensor(np.concatenate(predict_mask, 0))
+    instance_tokens = np.concatenate(instance_tokens, 0)
+
     data = (
         map_image, prior,
         future_agent_masks,
@@ -563,7 +577,7 @@ def nuscenes_collate(batch, test_set=False):
         num_future_agents, future_agents_traj, future_agents_traj_len, future_agents_traj_len_idx,
         future_agents_two_mask, future_agents_three_mask,
         decode_start_vel, decode_start_pos,
-        scene_id
+        scene_id, predict_mask, instance_tokens
     )
 
     return data

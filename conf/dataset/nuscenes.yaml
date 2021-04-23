@@ -9,4 +9,4 @@ meters_behind: 32
 meters_left: 32
 meters_right: 32
 # load_dir: '/home/q10/ws/repos/naverlabs2020/nus_dataset/cmu_dataset'
-load_dir: '/home/vilab/jegyeong/datasets/nus_dataset/cmu_dataset_6sec(1)'
+load_dir: '/home/vilab/jegyeong/datasets/nus_dataset/challenge_6sec'

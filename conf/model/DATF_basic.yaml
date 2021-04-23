@@ -8,9 +8,9 @@ gpu_devices: '0'
 
 flow_based_decoder: True
 
-mode: 'train'  # train | test | viz
+mode: 'test'  # train | test | viz
 #load_dir: '/home/q10/ws/repos/naverlabs2020/nus_dataset/cmu_dataset'
-load_dir: '/home/user/datasets/cmu_dataset'
+load_dir: '/home/vilab/jegyeong/datasets/nus_dataset/challenge_6sec'
 
 # Trajectory Parameters
 sampling_time: 6
@@ -33,8 +33,9 @@ lstm_layers: 1
 lstm_dropout: 0.3
 
 # the number of candidate futures in generative models
-num_candidates: 6  # Number of trajectory candidates sampled
+num_candidates: 10  # Number of trajectory candidates sampled
 scene_channels: 3
+k_to_report: [1,5,10]
 
 # CSP Models
 pooling_size: 30  # Map grid H and W dimension
@@ -57,7 +58,7 @@ disc_dropout: 0.5
 # Optimization Parameters
 optimizer: 'adam'
 num_epochs: 100
-batch_size: 4
+batch_size: 128
 learning_rate: 1e-4
 load_ckpt:
 start_epoch: 1  # Resume Model Training
@@ -75,7 +76,7 @@ test_render: 1  # Whether to render the outputs as figure
 #test_ckpt: '/home/q10/ws/repos/naverlabs2020/labs_hdmap (copy)/experiment/R2P2_RNN__05_April__17_16_/epoch100.pth.tar'
 #test_ckpt: '/home/q10/ws/repos/naverlabs2020/labs_hdmap (copy)/experiment/MATF__06_April__00_59_/epoch100.pth.tar'
 
-test_ckpt: '/home/user/hhhh_test.pth.tar'
+test_ckpt: '/home/vilab/daehee/labs_hdmap/experiment/6second__20_April__04_16_/ck_53_-21.3238_87.4734_3.3753_7.2977.pth.tar'
 
 version: 'v1.0-trainval'
 data_type: 'real'
